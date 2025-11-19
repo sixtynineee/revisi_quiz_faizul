@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Edit Soal</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="topbar">
+            <h1>Edit Soal</h1>
+            <div class="top-actions">
+                <a class="btn" href="admin.html">Kembali</a>
+            </div>
+        </header>
+
+        <main class="container">
+            <section class="card">
+                <form id="editQuestionForm" class="stack">
+                    <h3 id="editingQuestionTitle"></h3>
+                    <textarea id="edit_q_text" placeholder="Pertanyaan..." required></textarea>
+                    <input id="edit_q_a" placeholder="Pilihan A" required/>
+                    <input id="edit_q_b" placeholder="Pilihan B" required/>
+                    <input id="edit_q_c" placeholder="Pilihan C" required/>
+                    <input id="edit_q_d" placeholder="Pilihan D" required/>
+                    <select id="edit_q_answer">
+                        <option value="A">Jawaban benar: A</option>
+                        <option value="B">Jawaban benar: B</option>
+                        <option value="C">Jawaban benar: C</option>
+                        <option value="D">Jawaban benar: D</option>
+                    </select>
+                    <input id="edit_q_explain" placeholder="Penjelasan jawaban" />
+                    <div class="actions-row">
+                        <button type="submit" class="btn primary">Simpan Perubahan</button>
+                        <button type="button" id="cancelEdit" class="btn">Batal</button>
+                    </div>
+                </form>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <small>Edit Soal — Form akan otomatis terisi saat buka halaman edit.</small>
+        </footer>
+    </div>
+
+    <script type="module" src="user.js"></script>
+</body>
+</html>

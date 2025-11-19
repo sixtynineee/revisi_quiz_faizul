@@ -1,0 +1,23 @@
+{
+  "courses": [
+    {
+      "id": "c_all",
+      "name": "Semua Soal (Local)",
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Apa kepanjangan dari CPU?",
+          "choices": {
+            "A": "Central Processing Unit",
+            "B": "Control Process Unit",
+            "C": "Central Procedural Unit",
+            "D": "Computer Power Unit"
+          },
+          "answer": "A",
+          "explain": "CPU adalah unit pemrosesan utama di komputer."
+        }
+      ]
+    }
+  ]
+}
+

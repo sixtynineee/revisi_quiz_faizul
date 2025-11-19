@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Quiz App — User</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="app">
+        <header class="topbar">
+            <h1>Quiz App</h1>
+            <div class="top-actions">
+                <button id="themeToggle" class="btn circle">☾</button>
+                <a class="btn" href="admin.html">Admin</a>
+            </div>
+        </header>
+
+        <main class="container">
+
+            <!-- LIST COURSE -->
+            <section class="card" id="coursesSection">
+                <h2>Daftar Soal</h2>
+                <div id="coursesList" class="list"></div>
+            </section>
+
+            <!-- QUIZ VIEW -->
+            <section class="card" id="quizSection" style="display:none;">
+                <h2 id="quizTitle"></h2>
+                <div id="quizContainer"></div>
+
+                <div class="actions-row" style="margin-top:18px;">
+                    <button class="btn primary" id="finishQuizBtn">Selesai</button>
+                    <button class="btn" id="backToCourses">Kembali</button>
+                </div>
+            </section>
+
+            <!-- RESULT VIEW -->
+            <section class="card" id="resultSection" style="display:none;">
+                <h2>Hasil</h2>
+                <div id="resultBox"></div>
+                <div class="actions-row">
+                    <button class="btn" id="backHome">Kembali ke daftar</button>
+                </div>
+            </section>
+
+        </main>
+
+        <footer class="footer">
+            <small>Quiz App — User mode</small>
+        </footer>
+    </div>
+
+    <script type="module" src="user.js"></script>
+</body>
+</html>
