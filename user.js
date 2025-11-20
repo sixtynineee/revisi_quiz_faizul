@@ -1,5 +1,5 @@
 // =========================
-// USER.JS — FINAL VERSION
+// USER.JS — FINAL VERSION (100% FIXED)
 // =========================
 
 // Firebase Config
@@ -61,7 +61,6 @@ async function loadCourse(courseId) {
 async function renderCourses() {
   const list = await loadCourses();
   const container = document.querySelector("#coursesList");
-
   container.innerHTML = "";
 
   list.forEach(course => {
@@ -94,25 +93,34 @@ let USER_ANSWERS = {};
 
 async function startQuiz(courseId) {
   CURRENT_COURSE = await loadCourse(courseId);
-
   if (!CURRENT_COURSE) return;
 
-  // ACak urutan pertanyaan
+  // Acak urutan pertanyaan
   CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
 
-  // acak jawaban tiap pertanyaan
+  // ========================
+  // FIX UTAMA ADA DI SINI
+  // ========================
+
   CURRENT_COURSE.questions = CURRENT_COURSE.questions.map(q => {
+    // buat array opsi dengan flag benar
     const ops = [
-      { key: "A", text: q.options.A },
-      { key: "B", text: q.options.B },
-      { key: "C", text: q.options.C },
-      { key: "D", text: q.options.D }
+      { text: q.options.A, correct: q.correct === "A" },
+      { text: q.options.B, correct: q.correct === "B" },
+      { text: q.options.C, correct: q.correct === "C" },
+      { text: q.options.D, correct: q.correct === "D" }
     ];
 
+    // acak ops
     const shuffled = shuffle(ops);
+
+    // tentukan huruf baru sesuai posisi
+    const correctIndex = shuffled.findIndex(x => x.correct);
+    const newCorrectKey = ["A", "B", "C", "D"][correctIndex];
+
     return {
       ...q,
-      correct: shuffled.find(x => x.key === q.correct).key,
+      correct: newCorrectKey,
       options: {
         A: shuffled[0].text,
         B: shuffled[1].text,
@@ -190,14 +198,11 @@ function attachChoiceEvents() {
 // =========================
 
 function finishQuiz() {
-  const box = document.querySelector("#quizContainer");
-
   CURRENT_COURSE.questions.forEach((q, idx) => {
     const group = document.querySelectorAll(`#choices-${idx} .choice`);
     const correct = q.correct;
     const user = USER_ANSWERS[idx];
 
-    // disable group
     document.querySelector(`#choices-${idx}`).classList.add("disabled-choices");
 
     group.forEach(c => {
@@ -210,7 +215,6 @@ function finishQuiz() {
       }
     });
 
-    // show explanation
     document.querySelector(`#exp-${idx}`).style.display = "block";
   });
 }
@@ -231,13 +235,11 @@ document.querySelector("#backHome").onclick = () => {
   document.querySelector("#resultSection").style.display = "none";
 };
 
-// Theme toggle
 document.querySelector("#themeToggle").onclick = () => {
   document.body.classList.toggle("dark");
   localStorage.setItem("theme", document.body.classList.contains("dark"));
 };
 
-// Load theme
 if (localStorage.getItem("theme") === "true") {
   document.body.classList.add("dark");
 }
