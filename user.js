@@ -1,12 +1,3 @@
-// user.js
-// Unified user-side quiz script
-// - Firestore (with local fallback)
-// - numeric sort (abc1..abc10), shuffle, normalize question format
-// - confirm modal before submit
-// - supports two result flows:
-//    1) redirect to result.html (and pass data via sessionStorage) OR
-//    2) inline result rendering (if result area exists)
-// - no global leaks (module-scoped)
 
 // ----- FIREBASE CONFIG -----
 const firebaseConfig = {
@@ -30,33 +21,13 @@ const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
 const id = n => document.getElementById(n);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
 function escapeHtml(s){ if (s==null) return ""; return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'", "&#039;"); }
-
-function shuffle(arr){
-  if (!Array.isArray(arr)) return [];
-  const a = arr.slice();
-  for (let i=a.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function toast(msg, type='info'){
-  const t = document.createElement('div');
-  t.className = 'wa-toast ' + type;
-  t.textContent = msg;
-  Object.assign(t.style, { position:'fixed', right:'18px', top:'18px', padding:'8px 12px', borderRadius:'10px', zIndex:12000, color:'#fff' });
-  t.style.background = type==='success' ? '#25D366' : type==='error' ? '#ff6b6b' : '#0b74de';
-  document.body.appendChild(t);
-  setTimeout(()=> t.classList.add('hide'), 2500);
-  setTimeout(()=> t.remove(), 3000);
-}
+function shuffle(arr){ if (!Array.isArray(arr)) return []; const a = arr.slice(); for (let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function toast(msg, type='info'){ const t = document.createElement('div'); t.className = 'wa-toast ' + type; t.textContent = msg; Object.assign(t.style, { position:'fixed', right:'18px', top:'18px', padding:'8px 12px', borderRadius:'10px', zIndex:12000, color:'#fff' }); t.style.background = type==='success' ? '#25D366' : type==='error' ? '#ff6b6b' : '#0b74de'; document.body.appendChild(t); setTimeout(()=> t.classList.add('hide'), 2500); setTimeout(()=> t.remove(), 3000); }
 
 // ----- local storage keys -----
 const LOCAL_COURSES_KEY = "local_courses_data_v1";
-const LAST_RESULT_KEY = "last_quiz_result_v1"; // used if staying on same page
+const LAST_RESULT_KEY = "last_quiz_result_v1"; // used as fallback
 
 // ----- state -----
 let COURSES_CACHE = null;      // raw from firestore/local
@@ -110,20 +81,16 @@ function normalizeCourse(raw){
   const name = raw.name ?? raw.title ?? 'Untitled';
   const questionsRaw = Array.isArray(raw.questions) ? raw.questions : [];
   const questions = questionsRaw.map((q, qi)=>{
-    // build options array supporting different formats
     let opts = [];
     if (Array.isArray(q.options)){
       opts = q.options.map((t,i)=>({ text: t, key: ["A","B","C","D","E"][i]||String(i)}));
     } else if (q.options && typeof q.options === 'object'){
       ["A","B","C","D","E"].forEach(k=>{ if (q.options[k]!=null) opts.push({ text:q.options[k], key:k}); });
-      // include any other keys
       Object.keys(q.options).forEach(k=>{ if (!["A","B","C","D","E"].includes(k)) opts.push({ text:q.options[k], key:k}); });
     } else {
-      // fallback: try optA,optB...
       ["A","B","C","D"].forEach(k=>{ if (q['opt'+k]) opts.push({ text: q['opt'+k], key:k }); });
     }
 
-    // determine correctIndex (0..n-1)
     let correctIndex = 0;
     if (typeof q.correct === 'string'){
       const idx = ["A","B","C","D","E"].indexOf(q.correct.toUpperCase());
@@ -176,7 +143,7 @@ async function renderCourses(){
     setTimeout(()=> node.classList.add('shown'), 30*i);
   });
 
-  // attach start handlers
+  // attach start handlers (use fresh query after DOM inserted)
   $$('.start-btn').forEach(b=>{
     b.onclick = async () => {
       const idv = b.dataset.id;
@@ -189,25 +156,13 @@ async function renderCourses(){
   });
 }
 
-// ----- ensure result area exists when rendering inline -----
-function ensureResultAreaInline(){
-  let node = id('quizResultArea');
-  if (!node){
-    node = document.createElement('div');
-    node.id = 'quizResultArea';
-    node.style.marginTop = '12px';
-    const qContainer = id('quizContainer');
-    if (qContainer && qContainer.parentNode) qContainer.parentNode.insertBefore(node, qContainer.nextSibling);
-    else if (id('quizSection')) id('quizSection').appendChild(node);
-  }
-  return node;
-}
-
 // ----- START QUIZ -----
 function startQuiz(course){
   CURRENT_COURSE = JSON.parse(JSON.stringify(course));
   USER_ANSWERS = {};
   REVIEW_MODE = false;
+
+  if (!Array.isArray(CURRENT_COURSE.questions)) CURRENT_COURSE.questions = [];
 
   // shuffle questions
   CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
@@ -223,15 +178,15 @@ function startQuiz(course){
   // render
   if (id('quizTitle')) id('quizTitle').textContent = CURRENT_COURSE.name || 'Quiz';
   renderQuizView();
-  ensureResultAreaInline();
 
-  // show/hide sections (if animation helper exists use it)
+  // show quiz section
   if (typeof showOnlySectionAnimated === 'function') showOnlySectionAnimated('quizSection');
   else {
     const cs = id('coursesSection'), qsct = id('quizSection');
     if (cs) cs.style.display = 'none';
     if (qsct) qsct.style.display = 'block';
   }
+
   // show finish button
   const fb = id('finishQuizBtn'); if (fb) fb.style.display = 'inline-flex';
 }
@@ -257,29 +212,35 @@ function renderQuizView(){
   updateProgressHeader();
 }
 
-// ----- choice handling -----
+// ----- choice handling (delegated to quizContainer) -----
+// use event delegation so re-rendering doesn't detach handlers
 function attachChoiceEvents(){
-  $$('.choice').forEach(c=>{
-    c.onclick = null;
-    c.addEventListener('click', ev=>{
-      const elc = ev.currentTarget;
-      const qidx = parseInt(elc.dataset.q,10);
-      const opt = parseInt(elc.dataset.opt,10);
-      if (REVIEW_MODE) return;
-      USER_ANSWERS[qidx] = opt;
-      // visuals
-      $(`#choices-${qidx}`) && $(`#choices-${qidx}`).querySelectorAll('.choice').forEach(x=>x.classList.remove('chosen'));
-      elc.classList.add('chosen');
-      updateProgressHeader();
-      // auto scroll next unanswered
-      setTimeout(()=> {
-        const next = findNextUnanswered(qidx+1);
-        if (next!=null){
-          const node = id(`qcard-${next}`);
-          if (node) node.scrollIntoView({ behavior:'smooth', block:'center' });
-        }
-      }, 200);
-    });
+  const box = id('quizContainer');
+  if (!box) return;
+  // remove previous listener if exists by cloning node (safe approach)
+  const newBox = box.cloneNode(true);
+  box.parentNode.replaceChild(newBox, box);
+
+  newBox.addEventListener('click', ev => {
+    const el = ev.target.closest('.choice');
+    if (!el) return;
+    const qidx = parseInt(el.dataset.q,10);
+    const opt = parseInt(el.dataset.opt,10);
+    if (REVIEW_MODE) return;
+    USER_ANSWERS[qidx] = opt;
+    // visuals: clear group and set chosen
+    const group = newBox.querySelector(`#choices-${qidx}`);
+    if (group) group.querySelectorAll('.choice').forEach(x=>x.classList.remove('chosen'));
+    el.classList.add('chosen');
+    updateProgressHeader();
+    // auto-scroll next unanswered
+    setTimeout(()=> {
+      const next = findNextUnanswered(qidx+1);
+      if (next!=null){
+        const node = id(`qcard-${next}`);
+        if (node) node.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+    }, 180);
   });
 }
 
@@ -318,10 +279,8 @@ function ensureConfirmModal(){
 }
 function showConfirmModal(){ const m = id('confirmModal'); if (!m) return; m.style.display='flex'; setTimeout(()=> id('confirmYes') && id('confirmYes').focus(), 60); }
 
-// ----- finish logic: either redirect to result.html OR inline show -----
-function finishQuizHandler(){
-  ensureConfirmModal(); showConfirmModal();
-}
+// ----- finish logic: inline rendering (no automatic redirect) -----
+function finishQuizHandler(){ ensureConfirmModal(); showConfirmModal(); }
 
 function doFinishQuiz(){
   if (!CURRENT_COURSE) return;
@@ -329,70 +288,43 @@ function doFinishQuiz(){
   let score = 0;
   const total = CURRENT_COURSE.questions.length;
 
+  // mark each question visually
   CURRENT_COURSE.questions.forEach((q, idx)=>{
     const correct = q.correctIndex;
     const user = USER_ANSWERS[idx];
-    $(`#choices-${idx}`) && $(`#choices-${idx}`).querySelectorAll('.choice').forEach(c=>{
-      c.classList.remove('chosen','final-correct','final-wrong');
-      const opt = parseInt(c.dataset.opt,10);
-      if (opt === correct) c.classList.add('final-correct');
-      else if (user === opt) c.classList.add('final-wrong');
-      c.classList.add('disabled');
-    });
+    const choicesContainer = document.querySelector(`#choices-${idx}`);
+    if (choicesContainer) {
+      choicesContainer.querySelectorAll('.choice').forEach(c=>{
+        c.classList.remove('chosen','final-correct','final-wrong');
+        const opt = parseInt(c.dataset.opt,10);
+        if (opt === correct) c.classList.add('final-correct');
+        else if (user === opt) c.classList.add('final-wrong');
+        // disable pointer
+        c.classList.add('disabled');
+      });
+    }
     const exp = id(`exp-${idx}`); if (exp) exp.style.display='block';
     if (user === correct) score++;
   });
 
-  // Prepare result payload
-  const payload = {
-    courseId: CURRENT_COURSE.id,
-    courseName: CURRENT_COURSE.name,
-    totalQuestions: total,
-    correct: score,
-    timestamp: new Date().toISOString(),
-    answers: CURRENT_COURSE.questions.map((q, idx)=>({
-      question: q.question,
-      options: q.options.map(o=>o.text),
-      correctIndex: q.correctIndex,
-      userAnswerIndex: USER_ANSWERS[idx] ?? null,
-      explanation: q.explanation ?? ""
-    }))
-  };
+  // hide finish button to prevent double submit
+  const fin = id('finishQuizBtn'); if (fin) fin.style.display = 'none';
 
-  // If result.html exists in same folder, prefer redirect + sessionStorage
-  const resultPageUrl = (function(){
-    // try common filename
-    const candidates = ['result.html','results.html','hasil.html'];
-    const currentDir = window.location.pathname.replace(/\/[^/]*$/, '/');
-    for (const c of candidates){
-      // build path relative
-      const url = currentDir + c;
-      // can't do fetch HEAD (CORS), so detect by checking link element or doing best-effort assumption
-      // We'll just use 'result.html' if that file likely exists in your repo (you told me it does)
-      if (c === 'result.html') return url; // prefer result.html as you said
-    }
-    return null;
-  })();
+  // create summary & review nodes and insert right after quizContainer
+  const quizContainer = id('quizContainer');
+  const parent = quizContainer && quizContainer.parentNode ? quizContainer.parentNode : null;
 
-  if (resultPageUrl){
-    try {
-      sessionStorage.setItem('quiz_result_payload', JSON.stringify(payload));
-      // also save minimal last result for inline fallback later
-      localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(payload));
-      // redirect
-      window.location.href = resultPageUrl;
-      return;
-    } catch(e){
-      console.warn('sessionStorage failed, will attempt inline render', e);
-    }
-  }
+  // Remove any previous inline results (avoid duplicates)
+  const prev = parent && parent.querySelector('.inline-quiz-result-wrapper');
+  if (prev) prev.remove();
 
-  // fallback: inline render into quizResultArea
-  const area = ensureResultAreaInline();
-  area.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'inline-quiz-result-wrapper';
+  wrapper.style.marginTop = '14px';
+
+  // Summary card
   const summary = document.createElement('div');
   summary.className = 'card';
-  summary.style.marginTop = '12px';
   summary.innerHTML = `
     <h3>Hasil</h3>
     <p><strong>${score} / ${total}</strong> soal benar</p>
@@ -403,16 +335,9 @@ function doFinishQuiz(){
       <button class="btn" id="btnBackInline">Kembali ke daftar</button>
     </div>
   `;
-  area.appendChild(summary);
+  wrapper.appendChild(summary);
 
-  // wire inline buttons
-  setTimeout(()=> {
-    id('btnRetryInline') && (id('btnRetryInline').onclick = ()=> { USER_ANSWERS = {}; REVIEW_MODE = false; startQuiz(CURRENT_COURSE); window.scrollTo({top:0,behavior:'smooth'}); });
-    id('btnReviewInline') && (id('btnReviewInline').onclick = ()=> area.querySelector('#reviewContainer')?.scrollIntoView({behavior:'smooth'}));
-    id('btnBackInline') && (id('btnBackInline').onclick = ()=> { USER_ANSWERS = {}; CURRENT_COURSE = null; REVIEW_MODE = false; renderCourses(); if (id('quizSection')) id('quizSection').style.display='none'; if (id('coursesSection')) id('coursesSection').style.display='block'; });
-  }, 40);
-
-  // append review details
+  // Review details
   const review = document.createElement('div');
   review.id = 'reviewContainer';
   review.style.marginTop = '12px';
@@ -433,10 +358,44 @@ function doFinishQuiz(){
     `;
     review.appendChild(card);
   });
-  area.appendChild(review);
+  wrapper.appendChild(review);
 
-  // persist last result locally
-  try { localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(payload)); } catch(e){}
+  // Insert wrapper after the quizContainer
+  if (parent) {
+    if (quizContainer.nextSibling) parent.insertBefore(wrapper, quizContainer.nextSibling);
+    else parent.appendChild(wrapper);
+    // scroll to result smoothly
+    wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    // fallback: append to body
+    document.body.appendChild(wrapper);
+  }
+
+  // wire inline buttons
+  setTimeout(()=> {
+    const retry = document.getElementById('btnRetryInline');
+    const rev = document.getElementById('btnReviewInline');
+    const back = document.getElementById('btnBackInline');
+    if (retry) retry.onclick = ()=> { USER_ANSWERS = {}; REVIEW_MODE = false; startQuiz(CURRENT_COURSE); window.scrollTo({top:0,behavior:'smooth'}); };
+    if (rev) rev.onclick = ()=> document.getElementById('reviewContainer')?.scrollIntoView({behavior:'smooth'});
+    if (back) back.onclick = ()=> { USER_ANSWERS = {}; CURRENT_COURSE = null; REVIEW_MODE = false; renderCourses(); if (id('quizSection')) id('quizSection').style.display='none'; if (id('coursesSection')) id('coursesSection').style.display='block'; };
+  }, 40);
+
+  // persist last result locally as fallback (no redirect)
+  try { localStorage.setItem(LAST_RESULT_KEY, JSON.stringify({
+    courseId: CURRENT_COURSE.id,
+    courseName: CURRENT_COURSE.name,
+    totalQuestions: total,
+    correct: score,
+    timestamp: new Date().toISOString(),
+    answers: CURRENT_COURSE.questions.map((q, idx)=>({
+      question: q.question,
+      options: q.options.map(o=>o.text),
+      correctIndex: q.correctIndex,
+      userAnswerIndex: USER_ANSWERS[idx] ?? null,
+      explanation: q.explanation ?? ""
+    }))
+  })); } catch(e){}
 }
 
 // ----- UI wiring (theme + nav + buttons) -----
