@@ -1,36 +1,63 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Hasil Quiz</title>
-    <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-    <div class="app">
-        <header class="topbar">
-            <h1>Hasil</h1>
-            <div class="top-actions">
-                <button id="themeToggle3" class="btn circle">☾</button>
-                <a class="btn" href="index.html">Home</a>
-            </div>
-        </header>
+// app.js for result.html
+(function(){
+  const resultSummary = document.getElementById('resultSummary');
+  const detailedResults = document.getElementById('detailedResults');
+  const themeToggle3 = document.getElementById('themeToggle3');
 
-        <main class="container">
-            <section class="card" id="resultCard">
-                <h2 id="resultSummary"></h2>
-                <div id="detailedResults"></div>
-                <div class="actions-row">
-                    <a class="btn" href="index.html">Kembali ke Mata Kuliah</a>
-                </div>
-            </section>
-        </main>
+  function escapeHtml(s){ if (s==null) return ""; return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'", "&#039;"); }
 
-        <footer class="footer">
-            <small>Quiz App — Semoga hasilnya bagus!</small>
-        </footer>
-    </div>
+  // get payload from sessionStorage (preferred) or localStorage fallback
+  let payload = null;
+  try {
+    const raw = sessionStorage.getItem('quiz_result_payload');
+    if (raw) { payload = JSON.parse(raw); }
+  } catch(e){ console.warn(e); }
 
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+  if (!payload){
+    try {
+      const raw2 = localStorage.getItem('last_quiz_result_v1');
+      if (raw2) payload = JSON.parse(raw2);
+    } catch(e){}
+  }
+
+  if (!payload){
+    resultSummary.innerHTML = '<div class="muted">Tidak ada data hasil. Kembali ke daftar untuk mengerjakan kuis.</div>';
+    detailedResults.innerHTML = '';
+    return;
+  }
+
+  // summary
+  resultSummary.innerHTML = `<div style="margin-bottom:8px"><strong>${escapeHtml(payload.courseName || payload.courseId || 'Quiz')}</strong></div>
+    <div><b>${payload.correct} / ${payload.totalQuestions}</b> soal benar</div>
+    <div class="muted" style="margin-top:6px">${new Date(payload.timestamp).toLocaleString()}</div>`;
+
+  // detailed list
+  const out = [];
+  payload.answers.forEach((a, i) => {
+    const userIdx = a.userAnswerIndex;
+    const corr = a.correctIndex;
+    const isCorrect = userIdx === corr;
+    const optHtml = a.options.map((t, j) => {
+      const cls = j === corr ? 'final-correct' : (userIdx === j && userIdx !== corr ? 'final-wrong' : '');
+      return `<div class="choice ${cls}" style="margin-bottom:6px"><span class="label">${["A","B","C","D","E"][j]||(j+1)+'.'}</span> <span class="text">${escapeHtml(t)}</span></div>`;
+    }).join('');
+    out.push(`
+      <div class="question-card" style="margin-bottom:12px">
+        <div class="q-text"><b>${i+1}.</b> ${escapeHtml(a.question)}</div>
+        <div style="margin-top:8px">${optHtml}</div>
+        <div class="explanation muted" style="margin-top:8px"><strong>Penjelasan:</strong> ${escapeHtml(a.explanation || 'Tidak ada')}</div>
+      </div>
+    `);
+  });
+
+  detailedResults.innerHTML = out.join('');
+
+  // theme toggle
+  if (themeToggle3){
+    themeToggle3.onclick = () => {
+      document.documentElement.classList.toggle('dark-mode');
+      try { localStorage.setItem('darkMode', document.documentElement.classList.contains('dark-mode')); } catch(e){}
+    };
+    try { if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark-mode'); } catch(e){}
+  }
+})();
