@@ -367,7 +367,7 @@ function finishQuizWithConfirm() {
 
 function doFinishQuiz() {
   if (!CURRENT_COURSE) return;
-  REVIEW_MODE = false;
+  REVIEW_MODE = true; // set to review mode to disable further selections
 
   const total = CURRENT_COURSE.questions.length;
   let score = 0;
@@ -394,96 +394,48 @@ function doFinishQuiz() {
     if (user === correct) score++;
   });
 
-  // Populate resultSection with score + actions + review content
-  const resultBox = el("resultBox");
-  if (!resultBox) return;
-
-  resultBox.innerHTML = ""; // clear
-
-  // score summary (we will place review content below)
-  const summary = document.createElement("div");
-  summary.className = "card";
-  summary.style.marginBottom = "12px";
-  summary.innerHTML = `
-    <h3>Hasil</h3>
-    <p style="margin:6px 0 0 0"><b>Kamu menjawab ${score} dari ${total} soal dengan benar.</b></p>
-    <p class="muted" style="margin-top:6px">Tetap semangat, kamu pasti bisa lebih baik!</p>
-    <div style="display:flex;gap:10px;margin-top:12px">
-      <button class="btn" id="btnRetry">Ulangi</button>
-      <button class="btn" id="btnReview">Review Jawaban</button>
-      <button class="btn" id="btnBackToList">Kembali ke daftar</button>
-    </div>
-  `;
-  resultBox.appendChild(summary);
-
-  // create review container showing all Q + options + explanation (similar to quiz view but locked)
-  const review = document.createElement("div");
-  review.id = "reviewContainer";
-  review.style.marginTop = "8px";
-
-  CURRENT_COURSE.questions.forEach((q, idx) => {
-    const qDiv = document.createElement("div");
-    qDiv.className = "question-card";
-    qDiv.innerHTML = `
-      <div class="q-text"><b>${idx + 1}.</b> ${escapeHtml(q.question || "")}</div>
-      <div class="choices" id="rev-choices-${idx}">
-        ${["A","B","C","D"].map(opt => {
-          const userOpt = USER_ANSWERS[idx];
-          const isUser = userOpt === opt;
-          const isCorrect = q.correct === opt;
-          const classes = isCorrect ? "final-correct" : (isUser && !isCorrect ? "final-wrong" : "");
-          return `<div class="choice ${classes}"><span class="label">${opt}.</span><span class="text">${escapeHtml(q.options?.[opt] ?? "")}</span></div>`;
-        }).join("")}
-      </div>
-      <div class="explanation muted" style="margin-top:10px">
-        ${escapeHtml(q.explanation || "Tidak ada penjelasan.")}
+  // Update quizHeader to show score and new buttons
+  const header = el("quizHeader");
+  if (header) {
+    header.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-weight:600">Skor: ${score} / ${total} (${Math.round((total === 0 ? 0 : (score / total) * 100))}%) - Tetap semangat!</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" id="btnRetry">Ulangi</button>
+          <button class="btn" id="btnBackToList">Kembali ke daftar</button>
+        </div>
       </div>
     `;
-    review.appendChild(qDiv);
-  });
 
-  resultBox.appendChild(review);
+    // Wire new buttons
+    const btnRetry = el("btnRetry");
+    const btnBackToList = el("btnBackToList");
 
-  // wire buttons
-  const btnRetry = el("btnRetry");
-  const btnReview = el("btnReview");
-  const btnBackToList = el("btnBackToList");
+    if (btnRetry) {
+      btnRetry.onclick = () => {
+        // reset everything and restart the same course
+        USER_ANSWERS = {};
+        REVIEW_MODE = false;
+        startQuiz(CURRENT_COURSE.id);
+      };
+    }
 
-  if (btnRetry) {
-    btnRetry.onclick = () => {
-      // reset everything and restart the same course
-      USER_ANSWERS = {};
-      REVIEW_MODE = false;
-      startQuiz(CURRENT_COURSE.id);
-    };
+    if (btnBackToList) {
+      btnBackToList.onclick = () => {
+        USER_ANSWERS = {};
+        CURRENT_COURSE = null;
+        REVIEW_MODE = false;
+        renderCourses();
+        showOnlySection("coursesSection");
+      };
+    }
   }
 
-  if (btnReview) {
-    btnReview.onclick = () => {
-      // show review content in resultSection (already present), scroll to it
-      showOnlySection("resultSection");
-      // scroll to review container
-      const rc = el("reviewContainer");
-      if (rc) rc.scrollIntoView({ behavior: "smooth" });
-    };
-  }
-
-  if (btnBackToList) {
-    btnBackToList.onclick = () => {
-      USER_ANSWERS = {};
-      CURRENT_COURSE = null;
-      REVIEW_MODE = false;
-      renderCourses();
-      showOnlySection("coursesSection");
-    };
-  }
-
-  // Show results section (hide quiz)
-  showOnlySection("resultSection");
-
-  // scroll to top result
-  const rs = el("resultSection");
-  if (rs) rs.scrollIntoView({ behavior: "smooth" });
+  // Scroll to top of quiz to show the score
+  const quizSection = el("quizSection");
+  if (quizSection) quizSection.scrollIntoView({ behavior: "smooth" });
 }
 
 // -------------------------
