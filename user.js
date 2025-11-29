@@ -50,14 +50,28 @@ async function loadCourse(courseId) {
 }
 
 // =========================
-// RENDER COURSES (UPDATED)
+// RENDER COURSES (UPDATED SORT)
 // =========================
 
 async function renderCourses() {
   let list = await loadCourses();
 
-  // 🔥 Sort nama course sesuai abjad
-  list.sort((a, b) => a.name.localeCompare(b.name));
+  // 🔥 Sort berdasarkan huruf + angka
+  list.sort((a, b) => {
+    const regex = /(\D+)(\d+)?/;
+    const aMatch = a.name.match(regex);
+    const bMatch = b.name.match(regex);
+
+    const aTitle = aMatch[1].trim();
+    const bTitle = bMatch[1].trim();
+
+    const titleCompare = aTitle.localeCompare(bTitle);
+    if (titleCompare !== 0) return titleCompare;
+
+    const aNum = parseInt(aMatch[2] || "0");
+    const bNum = parseInt(bMatch[2] || "0");
+    return aNum - bNum;
+  });
 
   const container = document.querySelector("#coursesList");
   container.innerHTML = "";
@@ -179,7 +193,7 @@ function attachChoiceEvents() {
 }
 
 // =========================
-// FINISH QUIZ
+– FINISH QUIZ
 // =========================
 
 function finishQuiz() {
