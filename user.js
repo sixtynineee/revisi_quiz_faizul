@@ -1,8 +1,3 @@
-// =========================
-// USER.JS — FINAL VERSION (100% FIXED)
-// =========================
-
-// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -55,11 +50,15 @@ async function loadCourse(courseId) {
 }
 
 // =========================
-// RENDER COURSES
+// RENDER COURSES (UPDATED)
 // =========================
 
 async function renderCourses() {
-  const list = await loadCourses();
+  let list = await loadCourses();
+
+  // 🔥 Sort nama course sesuai abjad
+  list.sort((a, b) => a.name.localeCompare(b.name));
+
   const container = document.querySelector("#coursesList");
   container.innerHTML = "";
 
@@ -68,7 +67,7 @@ async function renderCourses() {
     item.className = "course-item";
     item.innerHTML = `
       <div class="left">
-        <div class="course-badge">${course.name.charAt(0)}</div>
+        <div class="course-badge">${course.name.charAt(0).toUpperCase()}</div>
         <div>
           <b>${course.name}</b><br>
           <span class="muted">${course.questions.length} soal</span>
@@ -95,15 +94,9 @@ async function startQuiz(courseId) {
   CURRENT_COURSE = await loadCourse(courseId);
   if (!CURRENT_COURSE) return;
 
-  // Acak urutan pertanyaan
   CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
 
-  // ========================
-  // FIX UTAMA ADA DI SINI
-  // ========================
-
   CURRENT_COURSE.questions = CURRENT_COURSE.questions.map(q => {
-    // buat array opsi dengan flag benar
     const ops = [
       { text: q.options.A, correct: q.correct === "A" },
       { text: q.options.B, correct: q.correct === "B" },
@@ -111,10 +104,7 @@ async function startQuiz(courseId) {
       { text: q.options.D, correct: q.correct === "D" }
     ];
 
-    // acak ops
     const shuffled = shuffle(ops);
-
-    // tentukan huruf baru sesuai posisi
     const correctIndex = shuffled.findIndex(x => x.correct);
     const newCorrectKey = ["A", "B", "C", "D"][correctIndex];
 
@@ -130,13 +120,11 @@ async function startQuiz(courseId) {
     };
   });
 
-  // swap views
   document.querySelector("#coursesSection").style.display = "none";
   document.querySelector("#quizSection").style.display = "block";
   document.querySelector("#resultSection").style.display = "none";
 
   document.querySelector("#quizTitle").textContent = CURRENT_COURSE.name;
-
   renderQuizView();
 }
 
@@ -152,7 +140,6 @@ function renderQuizView() {
   CURRENT_COURSE.questions.forEach((q, idx) => {
     const card = document.createElement("div");
     card.className = "question-card";
-
     card.innerHTML = `
       <div class="q-text"><b>${idx + 1}.</b> ${q.question}</div>
       <div class="choices" id="choices-${idx}">
@@ -163,12 +150,10 @@ function renderQuizView() {
           </div>
         `).join("")}
       </div>
-
       <div class="explanation muted" id="exp-${idx}" style="display:none;">
         ${q.explanation || "Tidak ada penjelasan."}
       </div>
     `;
-
     box.appendChild(card);
   });
 
@@ -207,12 +192,8 @@ function finishQuiz() {
 
     group.forEach(c => {
       const opt = c.dataset.opt;
-
-      if (opt === correct) {
-        c.classList.add("final-correct");
-      } else if (opt === user) {
-        c.classList.add("final-wrong");
-      }
+      if (opt === correct) c.classList.add("final-correct");
+      else if (opt === user) c.classList.add("final-wrong");
     });
 
     document.querySelector(`#exp-${idx}`).style.display = "block";
