@@ -1,6 +1,8 @@
 // =========================
-// FIREBASE CONFIG
+// user.js — Final Premium UX
 // =========================
+
+// FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -10,17 +12,19 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// Firebase imports
+// Firebase imports (ES module)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// Init Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Shuffle array (Fisher–Yates)
+// -------------------------
+// Utilities
+// -------------------------
 function shuffle(arr) {
-  let a = arr.slice();
+  if (!Array.isArray(arr)) return [];
+  const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
@@ -28,46 +32,79 @@ function shuffle(arr) {
   return a;
 }
 
-// Load courses
-async function loadCourses() {
+function escapeHtml(unsafe) {
+  if (unsafe == null) return "";
+  return String(unsafe)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// -------------------------
+// DOM Shortcuts & State
+// -------------------------
+const el = id => document.getElementById(id);
+const qs = sel => document.querySelector(sel);
+const qsa = sel => Array.from(document.querySelectorAll(sel));
+
+let CURRENT_COURSE = null;
+let USER_ANSWERS = {}; // { idx: "A" }
+let REVIEW_MODE = false;
+
+// -------------------------
+// Course loading & sorting
+// -------------------------
+async function loadCoursesRaw() {
   try {
     const snap = await getDocs(collection(db, "courses"));
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-    // Sorting A-Z + Angka terakhir (T1 → T2 … T10)
-    data.sort((a, b) => {
-      const regex = /^(.*?)(\d+)?$/;
-      const aMatch = (a.name ?? "").match(regex);
-      const bMatch = (b.name ?? "").match(regex);
-
-      const aText = aMatch[1].trim().toLowerCase();
-      const bText = bMatch[1].trim().toLowerCase();
-
-      const textCompare = aText.localeCompare(bText);
-      if (textCompare !== 0) return textCompare;
-
-      const aNum = parseInt(aMatch[2] ?? "0");
-      const bNum = parseInt(bMatch[2] ?? "0");
-
-      return aNum - bNum;
-    });
-
-    return data;
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (err) {
     console.warn("Firestore error", err);
     return [];
   }
 }
 
-async function loadCourse(courseId) {
-  const list = await loadCourses();
-  return list.find(c => c.id === courseId);
+/**
+ * Sort by textual prefix then numeric suffix:
+ * "Komunikasi T1", "Komunikasi T2", ..., "Komunikasi T10"
+ */
+function sortCourses(list) {
+  return list.sort((a, b) => {
+    const regex = /^(.*?)(\d+)?$/;
+    const aMatch = (a.name ?? "").match(regex) || ["", a.name ?? "", "0"];
+    const bMatch = (b.name ?? "").match(regex) || ["", b.name ?? "", "0"];
+
+    const aText = (aMatch[1] || "").trim().toLowerCase();
+    const bText = (bMatch[1] || "").trim().toLowerCase();
+
+    const textCompare = aText.localeCompare(bText);
+    if (textCompare !== 0) return textCompare;
+
+    const aNum = parseInt(aMatch[2] || "0", 10);
+    const bNum = parseInt(bMatch[2] || "0", 10);
+    return aNum - bNum;
+  });
 }
 
-// Render courses
+async function loadCourses() {
+  const raw = await loadCoursesRaw();
+  return sortCourses(raw);
+}
+
+async function loadCourse(courseId) {
+  const list = await loadCourses();
+  return list.find(c => c.id === courseId) || null;
+}
+
+// -------------------------
+// Render course list
+// -------------------------
 async function renderCourses() {
   const list = await loadCourses();
-  const container = document.querySelector("#coursesList");
+  const container = el("coursesList");
+  if (!container) return;
   container.innerHTML = "";
 
   list.forEach(course => {
@@ -75,162 +112,440 @@ async function renderCourses() {
     item.className = "course-item";
     item.innerHTML = `
       <div class="left">
-        <div class="course-badge">${course.name.charAt(0)}</div>
+        <div class="course-badge">${escapeHtml((course.name || "?").charAt(0).toUpperCase())}</div>
         <div>
-          <b>${course.name}</b><br>
-          <span class="muted">${course.questions.length} soal</span>
+          <b>${escapeHtml(course.name || "Tak bernama")}</b><br>
+          <span class="muted">${(course.questions && course.questions.length) || 0} soal</span>
         </div>
       </div>
-      <button class="btn primary" data-id="${course.id}">Mulai</button>
+      <button class="btn primary start-btn" data-id="${course.id}">Mulai</button>
     `;
     container.appendChild(item);
   });
 
-  document.querySelectorAll(".course-item button").forEach(btn => {
-    btn.onclick = () => startQuiz(btn.dataset.id);
+  qsa(".start-btn").forEach(btn => {
+    btn.addEventListener("click", () => startQuiz(btn.dataset.id));
   });
 }
 
-// GLOBAL STATE
-let CURRENT_COURSE = null;
-let USER_ANSWERS = {};
+// -------------------------
+// UI helpers for sections
+// -------------------------
+function showOnlySection(sectionId) {
+  const ids = ["coursesSection", "quizSection", "resultSection"];
+  ids.forEach(id => {
+    const node = el(id);
+    if (!node) return;
+    node.style.display = (id === sectionId) ? "block" : "none";
+  });
+}
 
+// -------------------------
+// Quiz lifecycle
+// -------------------------
 async function startQuiz(courseId) {
-  CURRENT_COURSE = await loadCourse(courseId);
-  if (!CURRENT_COURSE) return;
+  const course = await loadCourse(courseId);
+  if (!course) return;
+  CURRENT_COURSE = JSON.parse(JSON.stringify(course)); // deep copy
+  USER_ANSWERS = {};
+  REVIEW_MODE = false;
 
-  USER_ANSWERS = {}; // reset
+  // ensure questions array
+  if (!Array.isArray(CURRENT_COURSE.questions)) CURRENT_COURSE.questions = [];
 
+  // shuffle questions
   CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
 
+  // shuffle options per question and recalc correct key
   CURRENT_COURSE.questions = CURRENT_COURSE.questions.map(q => {
     const ops = [
-      { text: q.options.A, correct: q.correct === "A" },
-      { text: q.options.B, correct: q.correct === "B" },
-      { text: q.options.C, correct: q.correct === "C" },
-      { text: q.options.D, correct: q.correct === "D" }
+      { text: q.options?.A ?? "", correct: q.correct === "A" },
+      { text: q.options?.B ?? "", correct: q.correct === "B" },
+      { text: q.options?.C ?? "", correct: q.correct === "C" },
+      { text: q.options?.D ?? "", correct: q.correct === "D" }
     ];
-    const shuffled = shuffle(ops);
-    const correctIndex = shuffled.findIndex(x => x.correct);
-    const newCorrectKey = ["A","B","C","D"][correctIndex];
+    const sh = shuffle(ops);
+    const correctIndex = sh.findIndex(x => x.correct);
+    const newCorrectKey = ["A", "B", "C", "D"][correctIndex >= 0 ? correctIndex : 0];
+
     return {
       ...q,
       correct: newCorrectKey,
       options: {
-        A: shuffled[0].text,
-        B: shuffled[1].text,
-        C: shuffled[2].text,
-        D: shuffled[3].text
+        A: sh[0].text,
+        B: sh[1].text,
+        C: sh[2].text,
+        D: sh[3].text
       }
     };
   });
 
-  document.querySelector("#coursesSection").style.display = "none";
-  document.querySelector("#quizSection").style.display = "block";
-  document.querySelector("#resultSection").style.display = "none";
-
-  document.querySelector("#quizTitle").textContent = CURRENT_COURSE.name;
+  // render
+  renderQuizHeader();
   renderQuizView();
+  showOnlySection("quizSection");
+
+  // scroll to top of quiz
+  const quizSection = el("quizSection");
+  if (quizSection) quizSection.scrollIntoView({ behavior: "smooth" });
 }
 
-// Render quiz view
+function renderQuizHeader() {
+  // ensure a small header/controls area at top of quizSection
+  let header = qs("#quizHeader");
+  if (!header) {
+    header = document.createElement("div");
+    header.id = "quizHeader";
+    header.style.marginBottom = "12px";
+    const titleNode = el("quizTitle");
+    if (titleNode && titleNode.parentNode) {
+      titleNode.parentNode.insertBefore(header, titleNode.nextSibling);
+    } else {
+      const quizSection = el("quizSection");
+      if (quizSection) quizSection.insertBefore(header, quizSection.firstChild);
+    }
+  }
+
+  // progress & instructions
+  header.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="quizProgress" style="font-weight:600"></div>
+        <div id="quizAnswered" class="muted" style="font-size:13px"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" id="btnCancelQuiz">Batal</button>
+      </div>
+    </div>
+  `;
+
+  const cancelBtn = el("btnCancelQuiz");
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      // confirm cancel if any answer selected
+      const answered = Object.keys(USER_ANSWERS).length;
+      if (answered > 0) {
+        if (!confirm("Anda telah menjawab beberapa soal. Yakin ingin membatalkan dan kembali ke daftar?")) return;
+      }
+      showOnlySection("coursesSection");
+    };
+  }
+
+  updateProgressUI();
+}
+
+function updateProgressUI() {
+  const total = CURRENT_COURSE ? CURRENT_COURSE.questions.length : 0;
+  const answered = Object.keys(USER_ANSWERS).length;
+  const progressEl = el("quizProgress");
+  const answeredEl = el("quizAnswered");
+  if (progressEl) progressEl.textContent = `${answered} / ${total} terjawab`;
+  if (answeredEl) answeredEl.textContent = `${Math.round((total === 0 ? 0 : (answered / total) * 100))}% terjawab`;
+}
+
+// Render quiz view (questions)
 function renderQuizView() {
-  const box = document.querySelector("#quizContainer");
+  const box = el("quizContainer");
+  if (!box) return;
   box.innerHTML = "";
 
   CURRENT_COURSE.questions.forEach((q, idx) => {
     const card = document.createElement("div");
     card.className = "question-card";
+    card.id = `qcard-${idx}`;
+
     card.innerHTML = `
-      <div class="q-text"><b>${idx + 1}.</b> ${q.question}</div>
+      <div class="q-text"><b>${idx + 1}.</b> ${escapeHtml(q.question || "")}</div>
       <div class="choices" id="choices-${idx}">
         ${["A","B","C","D"].map(opt => `
-          <div class="choice" data-opt="${opt}" data-id="${idx}">
+          <div class="choice" data-opt="${opt}" data-idx="${idx}">
             <span class="label">${opt}.</span>
-            <span class="text">${q.options[opt]}</span>
+            <span class="text">${escapeHtml(q.options?.[opt] ?? "")}</span>
           </div>
         `).join("")}
       </div>
-
-      <div class="explanation muted" id="exp-${idx}" style="display:none;">
-        ${q.explanation || "Tidak ada penjelasan."}
+      <div class="explanation muted" id="exp-${idx}" style="display:none; margin-top:10px;">
+        ${escapeHtml(q.explanation || "Tidak ada penjelasan.")}
       </div>
     `;
+
     box.appendChild(card);
   });
 
   attachChoiceEvents();
+  updateProgressUI();
 }
 
-// Handle choices
 function attachChoiceEvents() {
-  document.querySelectorAll(".choice").forEach(c => {
-    c.onclick = () => {
-      const idx = c.dataset.id;
-      USER_ANSWERS[idx] = c.dataset.opt;
+  qsa(".choice").forEach(choice => {
+    // prevent multiple bindings
+    choice.onclick = null;
+    choice.addEventListener("click", (ev) => {
+      const elChoice = ev.currentTarget;
+      const idx = parseInt(elChoice.dataset.idx, 10);
+      const opt = elChoice.dataset.opt;
+      if (REVIEW_MODE) return; // don't allow selection in review mode
 
-      const group = document.querySelectorAll(`#choices-${idx} .choice`);
-      group.forEach(g => g.classList.remove("chosen"));
-      c.classList.add("chosen");
-    };
+      // record answer
+      USER_ANSWERS[idx] = opt;
+
+      // visual selected
+      qsa(`#choices-${idx} .choice`).forEach(c => c.classList.remove("chosen"));
+      elChoice.classList.add("chosen");
+
+      // update progress
+      updateProgressUI();
+
+      // auto-scroll to next unanswered after short delay
+      setTimeout(() => {
+        const next = findNextUnanswered(idx + 1);
+        if (next != null) {
+          const nextCard = el(`qcard-${next}`);
+          if (nextCard) nextCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 180);
+    });
   });
 }
 
-// Finish quiz
-function finishQuiz() {
+function findNextUnanswered(startIdx = 0) {
+  for (let i = startIdx; i < CURRENT_COURSE.questions.length; i++) {
+    if (!USER_ANSWERS.hasOwnProperty(i)) return i;
+  }
+  // if none forward, try from beginning
+  for (let i = 0; i < startIdx; i++) {
+    if (!USER_ANSWERS.hasOwnProperty(i)) return i;
+  }
+  return null;
+}
+
+// -------------------------
+// Confirmation Modal (Selesai)
+// -------------------------
+function ensureConfirmModal() {
+  if (el("confirmModal")) return;
+  const modal = document.createElement("div");
+  modal.id = "confirmModal";
+  modal.style.position = "fixed";
+  modal.style.inset = "0";
+  modal.style.display = "none";
+  modal.style.alignItems = "center";
+  modal.style.justifyContent = "center";
+  modal.style.background = "rgba(0,0,0,0.5)";
+  modal.innerHTML = `
+    <div style="background:var(--card);padding:18px;border-radius:12px;min-width:320px;max-width:90%;box-shadow:var(--soft-shadow)">
+      <h3 style="margin-top:0;margin-bottom:8px">Konfirmasi Submit</h3>
+      <p style="margin-top:0;margin-bottom:18px">Apakah Anda yakin ingin mengakhiri kuis sekarang? Jawaban yang sudah dipilih akan diserahkan untuk penilaian.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn" id="confirmCancel">Batal</button>
+        <button class="btn primary" id="confirmYes">Ya, Selesai</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  el("confirmCancel").onclick = () => { modal.style.display = "none"; };
+  el("confirmYes").onclick = () => {
+    modal.style.display = "none";
+    doFinishQuiz(); // execute finalization
+  };
+}
+
+function showConfirmModal() {
+  ensureConfirmModal();
+  const modal = el("confirmModal");
+  if (modal) modal.style.display = "flex";
+}
+
+// -------------------------
+// Finish quiz flow
+// -------------------------
+function finishQuizWithConfirm() {
+  // if no answers yet, still ask confirm
+  showConfirmModal();
+}
+
+function doFinishQuiz() {
+  if (!CURRENT_COURSE) return;
+  REVIEW_MODE = false;
+
   const total = CURRENT_COURSE.questions.length;
   let score = 0;
 
+  // mark choices and compute score
   CURRENT_COURSE.questions.forEach((q, idx) => {
+    const container = el(`choices-${idx}`);
+    if (container) container.classList.add("disabled-choices");
+
     const correct = q.correct;
     const user = USER_ANSWERS[idx];
-    const group = document.querySelectorAll(`#choices-${idx} .choice`);
 
-    if (user === correct) score++;
-
-    document.querySelector(`#choices-${idx}`).classList.add("disabled-choices");
-
-    group.forEach(c => {
+    qsa(`#choices-${idx} .choice`).forEach(c => {
+      c.classList.remove("chosen", "final-correct", "final-wrong");
       const opt = c.dataset.opt;
       if (opt === correct) c.classList.add("final-correct");
       else if (opt === user) c.classList.add("final-wrong");
     });
 
-    document.querySelector(`#exp-${idx}`).style.display = "block";
+    // show explanation
+    const exp = el(`exp-${idx}`);
+    if (exp) exp.style.display = "block";
+
+    if (user === correct) score++;
   });
 
-  const resultBox = document.querySelector("#resultBox");
-  resultBox.innerHTML = `
-    <p><b>Kamu menjawab ${score} dari ${total} soal dengan benar.</b></p>
-    <p class="muted">Tetap semangat, kamu pasti bisa lebih baik!</p>
+  // Populate resultSection with score + actions + review content
+  const resultBox = el("resultBox");
+  if (!resultBox) return;
+
+  resultBox.innerHTML = ""; // clear
+
+  // score summary (we will place review content below)
+  const summary = document.createElement("div");
+  summary.className = "card";
+  summary.style.marginBottom = "12px";
+  summary.innerHTML = `
+    <h3>Hasil</h3>
+    <p style="margin:6px 0 0 0"><b>Kamu menjawab ${score} dari ${total} soal dengan benar.</b></p>
+    <p class="muted" style="margin-top:6px">Tetap semangat, kamu pasti bisa lebih baik!</p>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn" id="btnRetry">Ulangi</button>
+      <button class="btn" id="btnReview">Review Jawaban</button>
+      <button class="btn" id="btnBackToList">Kembali ke daftar</button>
+    </div>
   `;
+  resultBox.appendChild(summary);
 
-  document.querySelector("#resultSection").style.display = "block";
+  // create review container showing all Q + options + explanation (similar to quiz view but locked)
+  const review = document.createElement("div");
+  review.id = "reviewContainer";
+  review.style.marginTop = "8px";
+
+  CURRENT_COURSE.questions.forEach((q, idx) => {
+    const qDiv = document.createElement("div");
+    qDiv.className = "question-card";
+    qDiv.innerHTML = `
+      <div class="q-text"><b>${idx + 1}.</b> ${escapeHtml(q.question || "")}</div>
+      <div class="choices" id="rev-choices-${idx}">
+        ${["A","B","C","D"].map(opt => {
+          const userOpt = USER_ANSWERS[idx];
+          const isUser = userOpt === opt;
+          const isCorrect = q.correct === opt;
+          const classes = isCorrect ? "final-correct" : (isUser && !isCorrect ? "final-wrong" : "");
+          return `<div class="choice ${classes}"><span class="label">${opt}.</span><span class="text">${escapeHtml(q.options?.[opt] ?? "")}</span></div>`;
+        }).join("")}
+      </div>
+      <div class="explanation muted" style="margin-top:10px">
+        ${escapeHtml(q.explanation || "Tidak ada penjelasan.")}
+      </div>
+    `;
+    review.appendChild(qDiv);
+  });
+
+  resultBox.appendChild(review);
+
+  // wire buttons
+  const btnRetry = el("btnRetry");
+  const btnReview = el("btnReview");
+  const btnBackToList = el("btnBackToList");
+
+  if (btnRetry) {
+    btnRetry.onclick = () => {
+      // reset everything and restart the same course
+      USER_ANSWERS = {};
+      REVIEW_MODE = false;
+      startQuiz(CURRENT_COURSE.id);
+    };
+  }
+
+  if (btnReview) {
+    btnReview.onclick = () => {
+      // show review content in resultSection (already present), scroll to it
+      showOnlySection("resultSection");
+      // scroll to review container
+      const rc = el("reviewContainer");
+      if (rc) rc.scrollIntoView({ behavior: "smooth" });
+    };
+  }
+
+  if (btnBackToList) {
+    btnBackToList.onclick = () => {
+      USER_ANSWERS = {};
+      CURRENT_COURSE = null;
+      REVIEW_MODE = false;
+      renderCourses();
+      showOnlySection("coursesSection");
+    };
+  }
+
+  // Show results section (hide quiz)
+  showOnlySection("resultSection");
+
+  // scroll to top result
+  const rs = el("resultSection");
+  if (rs) rs.scrollIntoView({ behavior: "smooth" });
 }
 
-// Buttons
-document.querySelector("#finishQuizBtn").onclick = finishQuiz;
+// -------------------------
+// Button wiring & theme
+// -------------------------
+function wireUI() {
+  // finish button: show confirmation modal (user chose B)
+  const finishBtn = el("finishQuizBtn");
+  if (finishBtn) {
+    finishBtn.onclick = () => finishQuizWithConfirm();
+  }
 
-document.querySelector("#backToCourses").onclick = () => {
-  document.querySelector("#coursesSection").style.display = "block";
-  document.querySelector("#quizSection").style.display = "none";
-  document.querySelector("#resultSection").style.display = "none";
-};
+  // back to courses from quiz UI (cancel)
+  const backToCoursesBtn = el("backToCourses");
+  if (backToCoursesBtn) {
+    backToCoursesBtn.onclick = () => {
+      if (confirm("Kembali ke daftar akan membatalkan kuis saat ini. Lanjutkan?")) {
+        USER_ANSWERS = {};
+        CURRENT_COURSE = null;
+        REVIEW_MODE = false;
+        showOnlySection("coursesSection");
+      }
+    };
+  }
 
-document.querySelector("#backHome").onclick = () => {
-  document.querySelector("#coursesSection").style.display = "block";
-  document.querySelector("#resultSection").style.display = "none";
-};
+  // backHome button in resultSection -> same as backToList behavior
+  const backHomeBtn = el("backHome");
+  if (backHomeBtn) {
+    backHomeBtn.onclick = () => {
+      USER_ANSWERS = {};
+      CURRENT_COURSE = null;
+      REVIEW_MODE = false;
+      renderCourses();
+      showOnlySection("coursesSection");
+    };
+  }
 
-// Theme toggle
-document.querySelector("#themeToggle").onclick = () => {
-  document.body.classList.toggle("dark");
-  localStorage.setItem("theme", document.body.classList.contains("dark"));
-};
+  // theme toggle
+  const themeToggle = el("themeToggle");
+  if (themeToggle) {
+    themeToggle.onclick = () => {
+      document.body.classList.toggle("dark");
+      try {
+        localStorage.setItem("theme", document.body.classList.contains("dark"));
+      } catch (e) {}
+    };
+  }
 
-if (localStorage.getItem("theme") === "true") {
-  document.body.classList.add("dark");
+  // restore theme
+  try {
+    if (localStorage.getItem("theme") === "true") document.body.classList.add("dark");
+  } catch (e) {}
 }
 
-// Load on start
-renderCourses();
+// -------------------------
+// Init
+// -------------------------
+function init() {
+  wireUI();
+  renderCourses();
+  ensureConfirmModal();
+}
+
+// run
+init();
