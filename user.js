@@ -1,3 +1,7 @@
+// =========================
+// FIREBASE CONFIG
+// =========================
+
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -9,7 +13,11 @@ const firebaseConfig = {
 
 // Firebase imports
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import {
+  getFirestore,
+  collection,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
 // Init Firebase
 const app = initializeApp(firebaseConfig);
@@ -44,43 +52,38 @@ async function loadCourses() {
 }
 
 async function loadCourse(courseId) {
-  try {
-    const snap = await getDocs(collection(db, "courses"));
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return data.find(c => c.id === courseId);
-  } catch (err) {
-    console.warn("Firestore error", err);
-    return null;
-  }
+  const snap = await getDocs(collection(db, "courses"));
+  const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return data.find(c => c.id === courseId);
 }
 
 // =========================
-// RENDER COURSES (UPDATED SORT)
+// RENDER COURSES
 // =========================
 
 async function renderCourses() {
-  let list = await loadCourses();
+  const list = await loadCourses();
 
-  // Sort berdasarkan huruf + angka (so "abc 1" ... "abc 10" terurut benar)
+  // FINAL SORT FIX (alphabet + numeric)
   list.sort((a, b) => {
-    // contoh name: "abc 10", "Matematika 2", atau "Fisika"
-    const regex = /^(.+?)(?:\s+(\d+))?$/; // grup1 = teks, grup2 = angka opsional
-    const aMatch = (a.name || "").match(regex) || ["", a.name || "", "0"];
-    const bMatch = (b.name || "").match(regex) || ["", b.name || "", "0"];
+    const regex = /^(.*?)(\d+)?$/;
 
-    const aTitle = aMatch[1].trim().toLowerCase();
-    const bTitle = bMatch[1].trim().toLowerCase();
+    const aMatch = (a.name ?? "").match(regex);
+    const bMatch = (b.name ?? "").match(regex);
 
-    const titleCompare = aTitle.localeCompare(bTitle);
-    if (titleCompare !== 0) return titleCompare;
+    const aText = aMatch[1].trim().toLowerCase();
+    const bText = bMatch[1].trim().toLowerCase();
 
-    const aNum = parseInt(aMatch[2] || "0", 10);
-    const bNum = parseInt(bMatch[2] || "0", 10);
+    const cmp = aText.localeCompare(bText);
+    if (cmp !== 0) return cmp;
+
+    const aNum = parseInt(aMatch[2] ?? "0", 10);
+    const bNum = parseInt(bMatch[2] ?? "0", 10);
+
     return aNum - bNum;
   });
 
   const container = document.querySelector("#coursesList");
-  if (!container) return;
   container.innerHTML = "";
 
   list.forEach(course => {
@@ -88,10 +91,10 @@ async function renderCourses() {
     item.className = "course-item";
     item.innerHTML = `
       <div class="left">
-        <div class="course-badge">${(course.name && course.name.charAt(0).toUpperCase()) || "?"}</div>
+        <div class="course-badge">${course.name.charAt(0)}</div>
         <div>
-          <b>${course.name || "Tak bernama"}</b><br>
-          <span class="muted">${(course.questions && course.questions.length) || 0} soal</span>
+          <b>${course.name}</b><br>
+          <span class="muted">${course.questions.length} soal</span>
         </div>
       </div>
       <button class="btn primary" data-id="${course.id}">Mulai</button>
@@ -115,27 +118,21 @@ async function startQuiz(courseId) {
   CURRENT_COURSE = await loadCourse(courseId);
   if (!CURRENT_COURSE) return;
 
-  if (!Array.isArray(CURRENT_COURSE.questions)) CURRENT_COURSE.questions = [];
-
-  // acak urutan pertanyaan
   CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
 
-  // acak opsi tiap pertanyaan dan update key jawaban yang benar
   CURRENT_COURSE.questions = CURRENT_COURSE.questions.map(q => {
     const ops = [
-      { text: q.options?.A ?? "", correct: q.correct === "A" },
-      { text: q.options?.B ?? "", correct: q.correct === "B" },
-      { text: q.options?.C ?? "", correct: q.correct === "C" },
-      { text: q.options?.D ?? "", correct: q.correct === "D" }
+      { text: q.options.A, correct: q.correct === "A" },
+      { text: q.options.B, correct: q.correct === "B" },
+      { text: q.options.C, correct: q.correct === "C" },
+      { text: q.options.D, correct: q.correct === "D" }
     ];
 
     const shuffled = shuffle(ops);
-    const correctIndex = shuffled.findIndex(x => x.correct);
-    const newCorrectKey = ["A", "B", "C", "D"][correctIndex >= 0 ? correctIndex : 0];
 
     return {
       ...q,
-      correct: newCorrectKey,
+      correct: ["A", "B", "C", "D"][shuffled.findIndex(x => x.correct)],
       options: {
         A: shuffled[0].text,
         B: shuffled[1].text,
@@ -145,17 +142,11 @@ async function startQuiz(courseId) {
     };
   });
 
-  // swap views
-  const coursesSection = document.querySelector("#coursesSection");
-  const quizSection = document.querySelector("#quizSection");
-  const resultSection = document.querySelector("#resultSection");
+  document.querySelector("#coursesSection").style.display = "none";
+  document.querySelector("#quizSection").style.display = "block";
+  document.querySelector("#resultSection").style.display = "none";
 
-  if (coursesSection) coursesSection.style.display = "none";
-  if (quizSection) quizSection.style.display = "block";
-  if (resultSection) resultSection.style.display = "none";
-
-  const quizTitle = document.querySelector("#quizTitle");
-  if (quizTitle) quizTitle.textContent = CURRENT_COURSE.name || "";
+  document.querySelector("#quizTitle").textContent = CURRENT_COURSE.name;
 
   renderQuizView();
 }
@@ -167,19 +158,19 @@ async function startQuiz(courseId) {
 function renderQuizView() {
   USER_ANSWERS = {};
   const box = document.querySelector("#quizContainer");
-  if (!box) return;
   box.innerHTML = "";
 
   CURRENT_COURSE.questions.forEach((q, idx) => {
     const card = document.createElement("div");
     card.className = "question-card";
+
     card.innerHTML = `
-      <div class="q-text"><b>${idx + 1}.</b> ${q.question || ""}</div>
+      <div class="q-text"><b>${idx + 1}.</b> ${q.question}</div>
       <div class="choices" id="choices-${idx}">
         ${["A","B","C","D"].map(opt => `
           <div class="choice" data-opt="${opt}" data-id="${idx}">
             <span class="label">${opt}.</span>
-            <span class="text">${q.options?.[opt] ?? ""}</span>
+            <span class="text">${q.options[opt]}</span>
           </div>
         `).join("")}
       </div>
@@ -187,6 +178,7 @@ function renderQuizView() {
         ${q.explanation || "Tidak ada penjelasan."}
       </div>
     `;
+
     box.appendChild(card);
   });
 
@@ -201,7 +193,7 @@ function attachChoiceEvents() {
   document.querySelectorAll(".choice").forEach(choice => {
     choice.onclick = () => {
       const opt = choice.dataset.opt;
-      const idx = parseInt(choice.dataset.id, 10);
+      const idx = parseInt(choice.dataset.id);
       USER_ANSWERS[idx] = opt;
 
       const group = document.querySelectorAll(`#choices-${idx} .choice`);
@@ -212,71 +204,67 @@ function attachChoiceEvents() {
 }
 
 // =========================
-// FINISH QUIZ
+// FINISH QUIZ (WITH SCORE)
 // =========================
 
 function finishQuiz() {
-  if (!CURRENT_COURSE || !Array.isArray(CURRENT_COURSE.questions)) return;
+  let score = 0;
 
   CURRENT_COURSE.questions.forEach((q, idx) => {
     const group = document.querySelectorAll(`#choices-${idx} .choice`);
     const correct = q.correct;
     const user = USER_ANSWERS[idx];
 
-    const choicesContainer = document.querySelector(`#choices-${idx}`);
-    if (choicesContainer) choicesContainer.classList.add("disabled-choices");
+    document.querySelector(`#choices-${idx}`).classList.add("disabled-choices");
 
     group.forEach(c => {
       const opt = c.dataset.opt;
-      if (opt === correct) c.classList.add("final-correct");
-      else if (opt === user) c.classList.add("final-wrong");
+
+      if (opt === correct) {
+        c.classList.add("final-correct");
+      } else if (opt === user) {
+        c.classList.add("final-wrong");
+      }
     });
 
-    const exp = document.querySelector(`#exp-${idx}`);
-    if (exp) exp.style.display = "block";
+    if (user === correct) score++;
+
+    document.querySelector(`#exp-${idx}`).style.display = "block";
   });
+
+  document.querySelector("#quizSection").style.display = "none";
+  document.querySelector("#resultSection").style.display = "block";
+
+  const resultText = document.querySelector("#resultScore");
+  if (resultText) {
+    resultText.textContent = `Benar: ${score} / ${CURRENT_COURSE.questions.length}`;
+  }
 }
 
 // =========================
 // BUTTONS & THEME
 // =========================
 
-const finishBtn = document.querySelector("#finishQuizBtn");
-if (finishBtn) finishBtn.onclick = finishQuiz;
+document.querySelector("#finishQuizBtn").onclick = finishQuiz;
 
-const backToCoursesBtn = document.querySelector("#backToCourses");
-if (backToCoursesBtn) backToCoursesBtn.onclick = () => {
-  const coursesSection = document.querySelector("#coursesSection");
-  const quizSection = document.querySelector("#quizSection");
-  if (coursesSection) coursesSection.style.display = "block";
-  if (quizSection) quizSection.style.display = "none";
+document.querySelector("#backToCourses").onclick = () => {
+  document.querySelector("#coursesSection").style.display = "block";
+  document.querySelector("#quizSection").style.display = "none";
 };
 
-const backHomeBtn = document.querySelector("#backHome");
-if (backHomeBtn) backHomeBtn.onclick = () => {
-  const coursesSection = document.querySelector("#coursesSection");
-  const resultSection = document.querySelector("#resultSection");
-  if (coursesSection) coursesSection.style.display = "block";
-  if (resultSection) resultSection.style.display = "none";
+document.querySelector("#backHome").onclick = () => {
+  document.querySelector("#coursesSection").style.display = "block";
+  document.querySelector("#resultSection").style.display = "none";
 };
 
-const themeToggleBtn = document.querySelector("#themeToggle");
-if (themeToggleBtn) {
-  themeToggleBtn.onclick = () => {
-    document.body.classList.toggle("dark");
-    localStorage.setItem("theme", document.body.classList.contains("dark"));
-  };
+document.querySelector("#themeToggle").onclick = () => {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme", document.body.classList.contains("dark"));
+};
+
+if (localStorage.getItem("theme") === "true") {
+  document.body.classList.add("dark");
 }
 
-// Restore theme from localStorage
-try {
-  if (localStorage.getItem("theme") === "true") {
-    document.body.classList.add("dark");
-  }
-} catch (e) {
-  // ignore localStorage errors (e.g., in private mode)
-  console.warn("Could not access localStorage for theme:", e);
-}
-
-// Load courses on startup
+// Start loading courses
 renderCourses();
