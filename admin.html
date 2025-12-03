@@ -1,75 +1,89 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Admin — Kelola Soal</title>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Quiz Manager</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="app admin-app">
-        <header class="topbar">
-            <h1>Admin Panel</h1>
-            <div class="top-actions">
-                <button id="themeToggleAdmin" class="btn circle">☾</button>
-                <a class="btn" href="index.html">Public</a>
+  <div class="app admin-app">
+    <!-- Topbar -->
+    <header class="topbar">
+      <h1>Admin Panel</h1>
+      <div class="top-actions">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input id="themeToggleAdmin" type="checkbox" style="display:none" />
+          <button id="themeBtnAdmin" class="btn circle">☾</button>
+        </label>
+        <a class="btn" href="index.html">Public</a>
+      </div>
+    </header>
+
+    <main class="container admin-container">
+      <!-- Sidebar -->
+      <aside class="card left-panel wa-sidebar">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+          <div class="badge" style="background:var(--accent);color:white">A</div>
+          <div>
+            <div style="font-weight:700">Admin Panel</div>
+            <div class="muted" id="adminEmailLabel">Not logged</div>
+          </div>
+        </div>
+
+        <div id="authBox">
+          <form id="loginForm">
+            <input id="loginEmail" placeholder="Email admin" type="email" />
+            <input id="loginPass" placeholder="Password" type="password" />
+            <div class="actions-row">
+              <button type="submit" class="btn primary">Login</button>
             </div>
-        </header>
+          </form>
 
-        <main class="container admin-container">
-            <aside class="card panel left-panel">
-                <h3>Status Admin</h3>
-                <div id="adminAuthBox" class="stack">
-                    <div id="adminStatus" class="muted">Belum login</div>
-                    <form id="adminLoginForm" class="stack">
-                        <input id="adminEmail" placeholder="email admin (dashboard)" />
-                        <input id="adminPass" placeholder="password" type="password"/>
-                        <div class="actions-row">
-                            <button type="submit" class="btn primary">Login Admin</button>
-                        </div>
-                    </form>
-                    <div class="actions-row" style="margin-top:8px;">
-                        <button id="adminLogoutBtn" class="btn" style="display:none">Logout</button>
-                    </div>
-                </div>
+          <div style="margin-top:8px;display:none" id="logoutWrap">
+            <div class="muted">Signed in as <span id="signedEmail"></span></div>
+            <div class="actions-row" style="margin-top:8px">
+              <button id="btnLogout" class="btn ghost">Logout</button>
+            </div>
+          </div>
+        </div>
 
-                <hr />
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,0.03);margin:12px 0" />
 
-                <h3>Daftar Soal</h3>
-                <div id="adminQuestionsList" class="list scrollable"></div>
-            </aside>
+        <div>
+          <div style="font-weight:700;margin-bottom:8px">Menu</div>
+          <div class="menu">
+            <button data-view="dashboard" class="active">📊 Dashboard</button>
+            <button data-view="courses">📚 Mata Kuliah</button>
+            <button data-view="peserta">👥 Peserta</button>
+            <button data-view="skor">🏆 Skor</button>
+          </div>
+        </div>
 
-            <section class="card panel right-panel">
-                <h3>Tambah Soal (Admin)</h3>
-                <form id="addQuestionForm" class="stack">
-                    <textarea id="q_text" placeholder="Pertanyaan..." required></textarea>
-                    <input id="q_a" placeholder="Pilihan A" required/>
-                    <input id="q_b" placeholder="Pilihan B" required/>
-                    <input id="q_c" placeholder="Pilihan C" required/>
-                    <input id="q_d" placeholder="Pilihan D" required/>
-                    <select id="q_answer">
-                        <option value="A">Jawaban benar: A</option>
-                        <option value="B">Jawaban benar: B</option>
-                        <option value="C">Jawaban benar: C</option>
-                        <option value="D">Jawaban benar: D</option>
-                    </select>
-                    <input id="q_explain" placeholder="Penjelasan jawaban (opsional)" />
-                    <div class="actions-row">
-                        <button type="submit" class="btn primary">Tambah Soal</button>
-                    </div>
-                </form>
+      </aside>
 
-                <hr />
-                <h4>Catatan</h4>
-                <p class="muted">Login admin diperlukan untuk menambah, mengedit, dan menghapus soal via Firebase API. Kamu bisa juga memakai Dashboard Firebase untuk CRUD langsung.</p>
-            </section>
-        </main>
+      <!-- Main content -->
+      <section class="card right-panel wa-main">
+        <div class="wa-topbar wa-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px">
+          <div><h2 id="mainTitle" style="margin:0;font-size:18px">Dashboard</h2></div>
+          <div>
+            <button id="btnRefresh" class="btn ghost sm">↻ Refresh</button>
+            <button id="btnNewCourse" class="btn sm">+ Course Baru</button>
+          </div>
+        </div>
 
-        <footer class="footer">
-            <small>Admin Panel — Kelola soal lewat API Firebase</small>
-        </footer>
-    </div>
+        <div id="mainContent" class="wa-card" style="padding:16px">
+          <div id="contentInner">Memuat data...</div>
+        </div>
 
-    <script type="module" src="app.js"></script>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <small>Admin Panel — Kelola Mata Kuliah, Materi & Soal</small>
+    </footer>
+  </div>
+
+  <script type="module" src="admin-firebase.js"></script>
 </body>
 </html>
