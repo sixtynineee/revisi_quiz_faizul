@@ -3,96 +3,58 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Admin — Kelola Mata Kuliah, Course, dan Soal</title>
+    <title>QuizApp - Admin Login</title>
     <link rel="stylesheet" href="style.css" />
-    <style>
-        /* Loading animation */
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid #e5e7eb;
-            border-top-color: #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Fallback styles jika JS dimatikan */
-        .no-js-message {
-            display: none;
-            padding: 40px;
-            text-align: center;
-            color: var(--text-primary);
-        }
-        
-        .no-js .no-js-message {
-            display: block;
-        }
-        
-        .no-js #app-root {
-            display: none;
-        }
-    </style>
 </head>
-<body class="no-js">
-    <!-- Pesan jika JavaScript dinonaktifkan -->
-    <div class="no-js-message">
-        <h2>JavaScript Diperlukan</h2>
-        <p>Admin Panel memerlukan JavaScript untuk berfungsi. Silakan aktifkan JavaScript di browser Anda.</p>
-        <p><a href="index.html" class="btn btn-primary">Kembali ke Halaman Utama</a></p>
-    </div>
+<body>
+    <div class="app">
+        <header class="topbar">
+            <h1>🔐 Admin Login</h1>
+            <div class="top-actions">
+                <button id="themeToggle" class="btn circle">☾</button>
+                <a class="btn" href="index.html">Home</a>
+            </div>
+        </header>
 
-    <!-- Container utama -->
-    <div id="app-root">
-        <!-- Loading state -->
-        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; gap: 20px;">
-            <div class="loading-spinner"></div>
-            <p style="color: var(--text-muted);">Memuat Admin Panel...</p>
-        </div>
-    </div>
-
-    <script>
-        // Hapus kelas no-js saat JavaScript aktif
-        document.body.classList.remove('no-js');
-        
-        // Deteksi error loading module
-        window.addEventListener('error', function(e) {
-            const appRoot = document.getElementById('app-root');
-            if (appRoot && e.target.tagName === 'SCRIPT' && e.target.src.includes('admin-firebase.js')) {
-                appRoot.innerHTML = `
-                    <div style="padding: 40px; text-align: center; color: var(--danger-color);">
-                        <h2>Error Memuat Modul</h2>
-                        <p>Terjadi kesalahan saat memuat Admin Panel. Pastikan file admin-firebase.js tersedia.</p>
-                        <p><a href="index.html" class="btn btn-primary">Kembali ke Halaman Utama</a></p>
-                        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 20px;">
-                            Error: ${e.message || 'Unknown error'}
-                        </p>
+        <main class="container">
+            <section class="card" style="max-width: 400px; margin: 50px auto;">
+                <h2>Login Admin</h2>
+                <p class="muted">Silakan login dengan akun admin</p>
+                
+                <form id="loginForm" class="stack">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="email" placeholder="admin@example.com" required>
                     </div>
-                `;
-            }
-        });
-        
-        // Timeout untuk loading terlalu lama
-        setTimeout(() => {
-            const loadingDiv = document.querySelector('#app-root > div');
-            if (loadingDiv && loadingDiv.innerHTML.includes('Memuat Admin Panel')) {
-                loadingDiv.innerHTML += `
-                    <p style="color: var(--warning-color); font-size: 0.875rem; margin-top: 10px;">
-                        Memakan waktu lebih lama dari biasanya...<br>
-                        <button onclick="location.reload()" style="background: none; border: none; color: var(--primary-color); cursor: pointer; text-decoration: underline;">
-                            Coba refresh halaman
+                    
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="password" placeholder="••••••••" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" class="btn primary" style="width: 100%;">
+                            Login
                         </button>
+                    </div>
+                </form>
+                
+                <div id="loginStatus" class="muted" style="margin-top: 20px;"></div>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                    <p class="muted" style="font-size: 12px;">
+                        <b>Catatan:</b> Hanya admin yang terdaftar di Firebase Authentication yang bisa login.
+                        Hubungi developer untuk mendapatkan akses admin.
                     </p>
-                `;
-            }
-        }, 5000);
-    </script>
+                </div>
+            </section>
+        </main>
 
-    <!-- Skrip admin-firebase.js akan membangun seluruh UI -->
+        <footer class="footer">
+            <small>© 2024 QuizApp • Halaman Admin</small>
+        </footer>
+    </div>
+
     <script type="module" src="admin-firebase.js"></script>
 </body>
 </html>
