@@ -11,7 +11,7 @@
   --muted:#555;
   --accent:#00A884;
   --danger:#ff4f4f;
-  --glass: rgba(0,0,0,0.04);
+  --glass: rgba(0,0,0,0.05);
   --soft-shadow: 0 6px 18px rgba(0,0,0,0.18);
   --radius:12px;
   --gap:14px;
@@ -25,7 +25,7 @@ body.dark {
   --card:#181818;
   --text:#eaf6ef;
   --muted:#9aa4a6;
-  --glass: rgba(255,255,255,0.03);
+  --glass: rgba(255,255,255,0.06);
   --soft-shadow: 0 6px 18px rgba(0,0,0,0.6);
 }
 
@@ -36,7 +36,7 @@ body.dark {
 * { box-sizing:border-box }
 html, body { height:100% }
 
-body{
+body {
   margin:0;
   background:var(--bg);
   color:var(--text);
@@ -45,13 +45,16 @@ body{
   transition: background .25s ease, color .25s ease;
 }
 
-.app{ min-height:100vh; display:flex; flex-direction:column }
+.app { min-height:100vh; display:flex; flex-direction:column }
 
 /* =====================================================
    TOPBAR
    ===================================================== */
-.topbar{
-  display:flex; align-items:center; justify-content:space-between;
+
+.topbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   padding:16px 20px;
   border-bottom:1px solid var(--glass);
 }
@@ -60,7 +63,7 @@ body{
    MAIN CONTAINER & CARD
    ===================================================== */
 
-.container{
+.container {
   display:flex;
   gap:var(--gap);
   padding:20px;
@@ -69,7 +72,7 @@ body{
   margin:18px auto;
 }
 
-.card{
+.card {
   background:var(--card);
   border-radius:var(--radius);
   padding:18px;
@@ -80,7 +83,8 @@ body{
 /* =====================================================
    BUTTONS
    ===================================================== */
-.btn{
+
+.btn {
   padding:8px 12px;
   border-radius:999px;
   cursor:pointer;
@@ -92,17 +96,18 @@ body{
   color:var(--text);
   transition:all .15s ease;
 }
-.btn:hover{ transform:translateY(-1px); opacity:.9; }
-.btn.primary{ background:var(--accent); color:#fff; border:0 }
-.btn.circle{ width:40px; height:40px; justify-content:center; }
-.btn.danger{ background:var(--danger); color:#fff; border:0 }
-.btn.ghost{ background:transparent; border:1px solid var(--glass); }
+
+.btn:hover { transform:translateY(-1px); opacity:.9; }
+.btn.primary { background:var(--accent); color:#fff; border:0 }
+.btn.circle { width:40px; height:40px; justify-content:center }
+.btn.danger { background:var(--danger); color:#fff; border:0 }
+.btn.ghost { background:transparent; border:1px solid var(--glass) }
 
 /* =====================================================
-   LIST & COURSE ITEM
+   COURSE LIST
    ===================================================== */
 
-.course-item{
+.course-item {
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -112,21 +117,20 @@ body{
   border:1px solid var(--glass);
   transition:.2s;
 }
-.course-item:hover{
-  background:rgba(255,255,255,0.08);
-}
-.course-badge{
-  width:44px;height:44px;border-radius:10px;
+.course-item:hover { background:rgba(255,255,255,0.08) }
+
+.course-badge {
+  width:44px; height:44px; border-radius:10px;
   background:rgba(0,0,0,0.25);
-  display:grid;place-items:center;
-  font-weight:600;color:var(--accent)
+  display:grid; place-items:center;
+  font-weight:600; color:var(--accent);
 }
 
 /* =====================================================
-   QUIZ
+   QUIZ – PERTANYAAN & PILIHAN
    ===================================================== */
 
-.question-card{
+.question-card {
   margin:12px 0;
   padding:12px;
   background:var(--glass);
@@ -134,33 +138,108 @@ body{
   border:1px solid var(--glass);
   transition:0.2s;
 }
-.question-card:hover{
+.question-card:hover {
   transform:translateY(-3px);
   box-shadow:var(--soft-shadow);
 }
 
-.choice{
+/* --- PILIHAN SOAL --- */
+.choice,
+.option-btn {
   padding:12px;
   border-radius:10px;
-  border:1px solid var(--glass);
   background:var(--card);
+  border:2px solid var(--glass);
   cursor:pointer;
+  transition:0.2s;
+  margin:8px 0;
+  color:var(--text);
 }
-.choice:hover{ transform:translateY(-2px); }
+
+.choice:hover,
+.option-btn:hover {
+  background:rgba(0,0,0,0.04);
+}
+
+body.dark .choice:hover,
+body.dark .option-btn:hover {
+  background:rgba(255,255,255,0.06);
+}
+
+/* Disabled */
+.choice.disabled,
+.option-btn.disabled {
+  opacity:0.5;
+  pointer-events:none;
+}
+
+/* Status Benar/Salah */
+.choice.correct,
+.option-btn.correct {
+  border-color:var(--accent);
+  background:rgba(0,168,132,0.15);
+  color:var(--accent);
+  font-weight:600;
+}
+
+.choice.wrong,
+.option-btn.wrong {
+  border-color:var(--danger);
+  background:rgba(255,79,79,0.15);
+  color:var(--danger);
+  font-weight:600;
+}
+
+/* Selected khusus untuk tombol model lama */
+.option-btn.selected {
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
+}
+
+/* Pembahasan */
+.explanation {
+  margin-top:8px;
+  padding:10px;
+  background:var(--card);
+  border-radius:8px;
+  border:1px solid var(--glass);
+}
 
 /* =====================================================
-   RESULT
+   RESULT – TAMPILAN HASIL
    ===================================================== */
 
-.result-row{
-  margin:10px 0;
-  padding:12px;
-  border-radius:10px;
+.result-item {
+  padding:14px;
+  margin:12px 0;
+  border-radius:12px;
   background:var(--glass);
-  border-left:4px solid transparent;
+  border-left:6px solid transparent;
 }
-.result-row.correct{ border-left-color:var(--accent) }
-.result-row.incorrect{ border-left-color:var(--danger) }
+
+.result-item.correct {
+  border-left-color:var(--accent);
+  background:rgba(0,168,132,0.15);
+}
+
+.result-item.wrong {
+  border-left-color:var(--danger);
+  background:rgba(255,79,79,0.15);
+}
+
+.result-question {
+  font-weight:600;
+  margin-bottom:6px;
+}
+
+.result-answer {
+  margin-top:6px;
+  padding:8px;
+  background:var(--card);
+  border-radius:8px;
+  border:1px solid var(--glass);
+}
 
 /* =====================================================
    ADMIN PANEL
@@ -172,27 +251,26 @@ body{
   border-color:var(--glass);
 }
 
-.badge{
+.badge {
   background:var(--glass);
   color:var(--accent);
 }
 
-.menu button{
-  width:100%;
-  padding:10px;
+.menu button {
+  width:100%; padding:10px;
   background:transparent;
   border-radius:8px;
   border:0;
   color:var(--text);
 }
-.menu button:hover{
-  background:var(--glass);
-}
-.menu button.active{
+
+.menu button:hover { background:var(--glass) }
+
+.menu button.active {
   background:rgba(255,255,255,0.12);
 }
 
-.materi-row, .q-row{
+.materi-row, .q-row {
   background:var(--glass);
   padding:12px;
   border-radius:10px;
@@ -202,9 +280,9 @@ body{
 /* =====================================================
    INPUTS
    ===================================================== */
+
 input, textarea, select {
-  width:100%;
-  padding:10px;
+  width:100%; padding:10px;
   border-radius:10px;
   background:var(--glass);
   border:1px solid var(--glass);
@@ -214,6 +292,7 @@ input, textarea, select {
 /* =====================================================
    MODAL
    ===================================================== */
+
 #wa_modal_root > div {
   backdrop-filter: blur(4px) brightness(0.5);
 }
@@ -221,6 +300,7 @@ input, textarea, select {
 /* =====================================================
    TOAST
    ===================================================== */
+
 .wa-toast {
   background:var(--accent);
   color:white;
@@ -229,86 +309,16 @@ input, textarea, select {
 }
 
 /* =====================================================
-   RESPONSIVE
+   UTILITIES
    ===================================================== */
-@media(max-width:900px){
-  .container{ flex-direction:column; }
-  .admin-container{ flex-direction:column; }
-}
 
-.option-btn {
-  display: block;
-  width: 100%;
-  margin: 6px 0;
-  padding: 10px;
-  border-radius: 8px;
-  border: 2px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-}
-
-.option-btn.selected {
-  background-color: #007bff;
-  color: #fff;
-  border-color: #007bff;
-}
-
-.option-btn.disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.explanation {
-  margin-top: 8px;
-  padding: 8px;
-  background: #f8f8f8;
-  border-radius: 6px;
-}
-
-.hidden {
-  display: none;
-}
+.hidden { display:none }
 
 /* =====================================================
-   FIX KONTRAS MODE GELAP UNTUK PILIHAN SOAL
+   RESPONSIVE
    ===================================================== */
 
-/* mode terang */
-.option-btn {
-  background: var(--card);
-  color: var(--text);
-  border: 2px solid var(--glass);
+@media(max-width:900px){
+  .container { flex-direction:column }
+  .admin-container { flex-direction:column }
 }
-
-/* hover terang */
-.option-btn:hover {
-  background: rgba(0,0,0,0.05);
-}
-
-/* mode gelap otomatis mengikuti var(--card) */
-body.dark .option-btn {
-  background: var(--card);
-  border-color: rgba(255,255,255,0.12);
-  color: var(--text);
-}
-
-/* hover mode gelap */
-body.dark .option-btn:hover {
-  background: rgba(255,255,255,0.06);
-}
-
-/* selected (terang + gelap) */
-.option-btn.selected {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-/* disabled */
-.option-btn.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-
-
