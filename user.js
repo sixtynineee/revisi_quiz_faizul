@@ -1,4 +1,4 @@
-// user.js - Quiz Page Script dengan Fitur Pengacakan
+// user.js - Quiz Page Script dengan Fitur Pengacakan (REVISI)
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -59,7 +59,6 @@ const nextBtn = document.getElementById('nextBtn');
 const finishBtn = document.getElementById('finishBtn');
 const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
-const quizControls = document.getElementById('quizControls'); // Kontrol tambahan
 
 // ========== FUNGSI PENGACAKAN ==========
 
@@ -182,28 +181,33 @@ function createQuizControls() {
         <span id="modeBadge" class="badge" style="background: #34C759; color: white;">Acak</span>
       </div>
       
-      <div style="display: flex; gap: 8px; align-items: center; margin-left: auto;">
+      <div style="display: flex; gap: 8px; align-items: center;">
         <button id="reshuffleBtn" class="btn outline" style="padding: 8px 16px;">
           <i class="fas fa-redo"></i> Acak Ulang
         </button>
-        <span style="font-size: 12px; color: var(--text-muted);">
-          <i class="fas fa-info-circle"></i> Soal dan jawaban akan diacak
+      </div>
+      
+      <div style="
+        display: flex; 
+        gap: 12px; 
+        margin-left: auto; 
+        align-items: center;
+        font-size: 13px;
+        color: var(--text-muted);
+      ">
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="fas fa-shuffle"></i>
+          <span>Soal diacak: <span id="randomCount">0</span></span>
+        </span>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="fas fa-clock"></i>
+          <span>Estimasi: <span id="timeEstimate">0 menit</span></span>
+        </span>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="fas fa-brain"></i>
+          <span>Kesulitan: <span id="difficultyLevel">Rata-rata</span></span>
         </span>
       </div>
-    </div>
-    
-    <div id="quizStats" class="quiz-stats" style="
-      display: flex;
-      gap: 20px;
-      margin-bottom: 15px;
-      padding: 10px 15px;
-      background: var(--bg-color);
-      border-radius: 8px;
-      font-size: 14px;
-      color: var(--text-muted);
-    ">
-      <span><i class="fas fa-shuffle"></i> Soal diacak: <span id="randomCount">0</span></span>
-      <span><i class="fas fa-clock"></i> Waktu: <span id="timeEstimate">0 menit</span></span>
     </div>
   `;
   
@@ -212,6 +216,9 @@ function createQuizControls() {
   // Tambahkan event listeners
   document.getElementById('toggleRandomBtn').addEventListener('click', toggleRandomMode);
   document.getElementById('reshuffleBtn').addEventListener('click', reshuffleCurrentQuiz);
+  
+  // Update stats
+  updateQuizStats();
 }
 
 // Toggle mode acak/urut
@@ -243,6 +250,9 @@ function toggleRandomMode() {
     updateQuizStats();
   }
   
+  // Tampilkan konfirmasi
+  showToast(`Mode diubah ke: ${isRandomized ? 'Acak' : 'Urut'}`, 'info');
+  
   // Simpan preferensi
   localStorage.setItem('quizMode', quizMode);
   localStorage.setItem('isRandomized', isRandomized);
@@ -252,13 +262,18 @@ function toggleRandomMode() {
 function reshuffleCurrentQuiz() {
   if (originalQuestions.length === 0) return;
   
+  // Konfirmasi dengan user
+  if (!confirm('Apakah Anda yakin ingin mengacak ulang semua soal? Jawaban yang sudah dipilih akan hilang.')) {
+    return;
+  }
+  
   // Acak ulang semua soal
   randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
   currentQuestionIndex = 0;
   userAnswers = {};
   
   // Tampilkan notifikasi
-  showToast('Soal dan pilihan jawaban telah diacak ulang!', 'success');
+  showToast('Semua soal dan pilihan telah diacak ulang!', 'info');
   
   renderQuestion();
   updateQuizStats();
@@ -268,6 +283,7 @@ function reshuffleCurrentQuiz() {
 function updateQuizStats() {
   const randomCount = document.getElementById('randomCount');
   const timeEstimate = document.getElementById('timeEstimate');
+  const difficultyLevel = document.getElementById('difficultyLevel');
   
   if (randomCount) {
     const randomizedCount = randomizedQuestions.filter(q => q.isRandomized).length;
@@ -277,6 +293,28 @@ function updateQuizStats() {
   if (timeEstimate) {
     const estimatedTime = Math.ceil(randomizedQuestions.length * 1.5); // 1.5 menit per soal
     timeEstimate.textContent = `${estimatedTime} menit`;
+  }
+  
+  if (difficultyLevel && randomizedQuestions.length > 0) {
+    // Hitung tingkat kesulitan rata-rata
+    const difficulties = randomizedQuestions.map(q => q.difficulty || 'medium');
+    const difficultyCount = {
+      easy: difficulties.filter(d => d.toLowerCase() === 'easy').length,
+      medium: difficulties.filter(d => d.toLowerCase() === 'medium').length,
+      hard: difficulties.filter(d => d.toLowerCase() === 'hard').length
+    };
+    
+    // Tentukan level kesulitan dominan
+    let dominantLevel = 'medium';
+    if (difficultyCount.hard > difficultyCount.medium && difficultyCount.hard > difficultyCount.easy) {
+      dominantLevel = 'Sulit';
+    } else if (difficultyCount.easy > difficultyCount.medium && difficultyCount.easy > difficultyCount.hard) {
+      dominantLevel = 'Mudah';
+    } else {
+      dominantLevel = 'Rata-rata';
+    }
+    
+    difficultyLevel.textContent = dominantLevel;
   }
 }
 
@@ -480,10 +518,9 @@ window.startQuiz = async function(courseId, courseName) {
     
     // Render first question
     renderQuestion();
-    updateQuizStats();
     
-    // Tampilkan notifikasi
-    showToast(`Quiz dimulai! ${randomizedQuestions.length} soal siap dikerjakan.`, 'success');
+    // Tampilkan notifikasi awal
+    showToast(`Quiz dimulai! ${randomizedQuestions.length} soal siap dikerjakan.`, 'info');
     
   } catch (error) {
     console.error("Error loading questions:", error);
@@ -511,50 +548,96 @@ function renderQuestion() {
   
   // Cek apakah soal ini diacak
   const isRandomizedQuestion = question.isRandomized === true;
-  const randomizationBadge = isRandomizedQuestion ? 
-    '<span class="badge" style="background: #34C759; color: white; font-size: 10px; padding: 2px 6px; margin-left: 8px;">Acak</span>' : 
-    '<span class="badge" style="background: #007AFF; color: white; font-size: 10px; padding: 2px 6px; margin-left: 8px;">Urut</span>';
   
   quizContainer.innerHTML = `
-    <div class="q-text" style="position: relative;">
-      <b>${currentQuestionIndex + 1}.</b> ${question.pertanyaan || question.question || 'Pertanyaan tidak tersedia'}
-      ${randomizationBadge}
-      ${question.difficulty ? `<span class="badge" style="background: ${getDifficultyColor(question.difficulty)}; margin-left: 8px;">${question.difficulty}</span>` : ''}
-    </div>
-    <div class="choices">
-      ${['A', 'B', 'C', 'D'].map(key => {
-        const optionText = (question.pilihan || question.options || {})[key] || '';
-        const isSelected = userAnswers[currentQuestionIndex] === key;
-        const isDisabled = !optionText || optionText.trim() === '';
+    <div style="margin-bottom: 20px;">
+      <!-- Header Soal -->
+      <div style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-color);
+      ">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 style="margin: 0; font-size: 18px;">Soal ${currentQuestionIndex + 1}</h3>
+          ${isRandomizedQuestion ? 
+            '<span class="badge" style="background: #34C759; color: white;">Pilihan Diacak</span>' : 
+            '<span class="badge" style="background: #007AFF; color: white;">Pilihan Urut</span>'
+          }
+          ${question.difficulty ? 
+            `<span class="badge" style="background: ${getDifficultyColor(question.difficulty)}; color: white;">
+              ${getDifficultyText(question.difficulty)}
+            </span>` : 
+            ''
+          }
+        </div>
         
-        if (isDisabled) return '';
-        
-        return `
-          <div class="choice ${isSelected ? 'selected' : ''}" 
-               onclick="selectAnswer('${key}')"
-               style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
-            <span class="label">${key}.</span>
-            <span class="text">${optionText || `Pilihan ${key} kosong`}</span>
-            ${isSelected ? '<span style="color: #25D366; margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
-          </div>
-        `;
-      }).join('')}
+        <div style="font-size: 13px; color: var(--text-muted);">
+          <i class="fas fa-info-circle"></i> Pilih salah satu jawaban
+        </div>
+      </div>
+      
+      <!-- Pertanyaan -->
+      <div class="q-text" style="
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 25px;
+        padding: 15px;
+        background: var(--card-bg);
+        border-radius: 8px;
+        border-left: 4px solid var(--primary-color);
+      ">
+        ${question.pertanyaan || question.question || 'Pertanyaan tidak tersedia'}
+      </div>
+      
+      <!-- Pilihan Jawaban -->
+      <div class="choices">
+        ${['A', 'B', 'C', 'D'].map(key => {
+          const optionText = (question.pilihan || question.options || {})[key] || '';
+          const isSelected = userAnswers[currentQuestionIndex] === key;
+          const isDisabled = !optionText || optionText.trim() === '';
+          
+          if (isDisabled) return '';
+          
+          return `
+            <div class="choice ${isSelected ? 'selected' : ''}" 
+                 onclick="selectAnswer('${key}')"
+                 style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+              <span class="label">${key}.</span>
+              <span class="text">${optionText || `Pilihan ${key} kosong`}</span>
+              ${isSelected ? '<span style="color: var(--primary-color); margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <!-- Info Tambahan -->
+      ${isRandomizedQuestion ? `
+      <div style="
+        margin-top: 20px;
+        padding: 10px 15px;
+        background: rgba(52, 199, 89, 0.1);
+        border-radius: 8px;
+        border-left: 4px solid #34C759;
+        font-size: 13px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      ">
+        <i class="fas fa-info-circle" style="color: #34C759;"></i>
+        <div>
+          <strong>Pilihan jawaban telah diacak.</strong> Perhatikan baik-baik sebelum memilih jawaban.
+          ${question.originalCorrectAnswer ? 
+            `(Jawaban benar asli: ${question.originalCorrectAnswer})` : 
+            ''
+          }
+        </div>
+      </div>
+      ` : ''}
     </div>
-    
-    ${isRandomizedQuestion ? `
-    <div style="
-      margin-top: 20px;
-      padding: 10px;
-      background: rgba(52, 199, 89, 0.1);
-      border-radius: 8px;
-      border-left: 4px solid #34C759;
-      font-size: 13px;
-      color: var(--text-muted);
-    ">
-      <i class="fas fa-info-circle" style="color: #34C759; margin-right: 8px;"></i>
-      <strong>Pilihan jawaban telah diacak.</strong> Perhatikan baik-baik sebelum memilih jawaban.
-    </div>
-    ` : ''}
   `;
   
   // Update button states
@@ -573,19 +656,22 @@ function getDifficultyColor(difficulty) {
   }
 }
 
-// Select Answer
+// Helper function untuk teks difficulty
+function getDifficultyText(difficulty) {
+  switch (difficulty?.toLowerCase()) {
+    case 'easy': return 'Mudah';
+    case 'medium': return 'Sedang';
+    case 'hard': return 'Sulit';
+    default: return 'Sedang';
+  }
+}
+
+// Select Answer - DIHAPUS NOTIFIKASI OTOMATIS
 window.selectAnswer = function(answer) {
   userAnswers[currentQuestionIndex] = answer;
   renderQuestion();
   
-  // Tampilkan feedback instan (opsional)
-  const currentQuestion = randomizedQuestions[currentQuestionIndex];
-  if (currentQuestion && answer === currentQuestion.jawaban) {
-    // Jawaban benar
-    setTimeout(() => {
-      showToast('Jawaban benar!', 'success');
-    }, 300);
-  }
+  // TIDAK ADA NOTIFIKASI OTOMATIS! User tidak tahu apakah jawaban benar atau salah sampai selesai quiz
 };
 
 // Navigation
@@ -608,6 +694,14 @@ quitBtn.addEventListener('click', confirmQuit);
 
 // Finish Quiz
 async function finishQuiz() {
+  // Konfirmasi dengan user
+  const unansweredQuestions = randomizedQuestions.length - Object.keys(userAnswers).length;
+  if (unansweredQuestions > 0) {
+    if (!confirm(`Masih ada ${unansweredQuestions} soal yang belum terjawab. Yakin ingin menyelesaikan quiz?`)) {
+      return;
+    }
+  }
+  
   // Stop timer
   if (timerInterval) {
     clearInterval(timerInterval);
@@ -630,7 +724,8 @@ async function finishQuiz() {
       isCorrect,
       explanation: q.explanation,
       isRandomized: q.isRandomized,
-      originalCorrectAnswer: q.originalCorrectAnswer
+      originalCorrectAnswer: q.originalCorrectAnswer,
+      difficulty: q.difficulty || 'medium'
     };
   });
   
@@ -638,9 +733,17 @@ async function finishQuiz() {
   const randomizedCount = randomizedQuestions.filter(q => q.isRandomized).length;
   const totalQuestions = randomizedQuestions.length;
   
+  // Hitung statistik kesulitan
+  const difficultyStats = {
+    easy: results.filter(r => r.difficulty === 'easy').length,
+    medium: results.filter(r => r.difficulty === 'medium').length,
+    hard: results.filter(r => r.difficulty === 'hard').length
+  };
+  
   // Save result to localStorage dengan info pengacakan
   const result = {
     courseName: currentCourse.name,
+    courseId: currentCourse.id,
     totalQuestions: totalQuestions,
     score: score,
     percentage: Math.round((score / totalQuestions) * 100),
@@ -650,7 +753,9 @@ async function finishQuiz() {
     quizMode: quizMode,
     isRandomized: isRandomized,
     randomizedCount: randomizedCount,
-    randomizationPercentage: Math.round((randomizedCount / totalQuestions) * 100)
+    randomizationPercentage: Math.round((randomizedCount / totalQuestions) * 100),
+    difficultyStats: difficultyStats,
+    unansweredQuestions: unansweredQuestions
   };
   
   localStorage.setItem('quizResult', JSON.stringify(result));
@@ -665,10 +770,12 @@ async function finishQuiz() {
       timeSpent: timer,
       quizMode: quizMode,
       isRandomized: isRandomized,
+      randomizedCount: randomizedCount,
       timestamp: serverTimestamp()
     });
   } catch (error) {
     console.error("Error saving result:", error);
+    // Tetap lanjut ke hasil meski gagal save ke Firebase
   }
   
   // Tampilkan notifikasi sebelum redirect
@@ -775,6 +882,18 @@ style.textContent = `
   
   .badge {
     transition: all 0.3s ease;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  
+  .choice {
+    transition: all 0.2s ease;
+  }
+  
+  .choice:hover {
+    transform: translateX(5px);
   }
 `;
 document.head.appendChild(style);
