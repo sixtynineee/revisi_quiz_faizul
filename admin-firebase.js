@@ -566,3 +566,308 @@ document.addEventListener('DOMContentLoaded', () => {
   // try refresh if already logged-in and admin
   // onAuthStateChanged will call refreshAndRender for authorized admin
 });
+
+    // selesai dashboard
+}
+
+function createCourseRow(course) {
+  return el('div', { class:'course-item' },
+    el('div', {}, 
+      el('div', { style:'font-weight:600' }, escapeHTML(course.name)),
+      el('div', { class:'muted', style:'font-size:12px' },
+        (course.materi?.length || 0) + ' materi • ' +
+        course.materi?.reduce((t,m)=>t+(m.questions?.length||0),0) + ' soal'
+      )
+    ),
+    el('div', {},
+      el('button', { class:'btn sm', onclick:()=>openCourseEditor(course) }, 'Edit')
+    )
+  );
+}
+
+// ----------------------- Courses View -----------------------
+function renderCourses(container) {
+  container.innerHTML = `
+    <div class="wa-card">
+      <h3>Daftar Course</h3>
+      <p class="muted">Klik tombol "Tambah Course" untuk membuat baru</p>
+      <div id="courseList" style="margin-top:18px"></div>
+    </div>
+  `;
+  const list = qs('#courseList');
+  APP.courses.forEach(c => list.appendChild(createCourseRow(c)));
+}
+
+// ----------------------- Peserta View -----------------------
+function renderPeserta(container) {
+  container.innerHTML = `
+    <div class="wa-card">
+      <h3>Peserta</h3>
+      ${APP.participants.length === 0 ? '<p class="muted">Belum ada peserta</p>' : ''}
+      <div style="margin-top:12px">
+        ${APP.participants.map(p => `
+          <div class="q-row">
+            <div>
+              <b>${escapeHTML(p.name)}</b><br>
+              <span class="muted">${escapeHTML(p.email || '-') }</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------- Skor View -----------------------
+function renderSkor(container) {
+  container.innerHTML = `
+    <div class="wa-card">
+      <h3>Skor Peserta</h3>
+      ${APP.scores.length === 0 ? '<p class="muted">Belum ada skor</p>' : ''}
+      <div style="margin-top:12px">
+        ${APP.scores.map(s => `
+          <div class="q-row">
+            <div>
+              <b>${escapeHTML(s.name)}</b><br>
+              <span class="muted">Course: ${escapeHTML(s.courseName)}</span><br>
+              <span class="muted">Skor: ${s.score}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------- Course Editor -----------------------
+function openCourseEditor(course=null) {
+  const isEdit = !!course;
+  const data = course || { id:null, name:'', description:'', materi:[] };
+
+  const container = qs('#contentInner');
+  container.innerHTML = '';
+
+  const wrap = el('div', { class:'wa-card' },
+    el('h3', {}, isEdit ? 'Edit Course' : 'Buat Course'),
+    el('label', {}, 'Nama course'),
+    el('input', { id:'courseName', value:data.name }),
+    el('label', {}, 'Deskripsi'),
+    el('textarea', { id:'courseDesc' }, data.description || ''),
+    el('div', { style:'margin-top:12px;font-weight:600' }, 'Materi'),
+    el('div', { id:'materiList', style:'margin-top:8px' }),
+    el('button', { class:'btn ghost', onclick:()=>addMateriRow(data) }, 'Tambah Materi'),
+    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
+      el('button', { class:'btn', onclick:()=>saveCourseEditor(data) }, 'Simpan'),
+      isEdit ? el('button', { class:'btn danger', onclick:()=>deleteCourseConfirm(data) }, 'Hapus') : ''
+    )
+  );
+
+  container.appendChild(wrap);
+  renderMateriList(data);
+}
+
+function renderMateriList(course) {
+  const list = qs('#materiList');
+  list.innerHTML = '';
+
+  (course.materi || []).forEach(m => list.appendChild(createMateriRow(course, m)));
+}
+
+function createMateriRow(course, materi) {
+  return el('div', { class:'materi-row' },
+    el('div', { class:'materi-title' }, escapeHTML(materi.title)),
+    el('div', {},
+      el('button', { class:'btn sm ghost', onclick:()=>editMateri(course, materi) }, 'Edit'),
+      el('button', { class:'btn sm danger', onclick:()=>deleteMateri(course, materi) }, 'Hapus')
+    )
+  );
+}
+
+// ----------------------- Materi Editor -----------------------
+function editMateri(course, materi) {
+  const container = qs('#contentInner');
+  container.innerHTML = '';
+
+  const wrap = el('div', { class:'wa-card' },
+    el('h3', {}, 'Edit Materi'),
+    el('label', {}, 'Judul'),
+    el('input', { id:'materiTitle', value:materi.title }),
+    el('label', {}, 'Deskripsi'),
+    el('textarea', { id:'materiDesc' }, materi.description || ''),
+    el('div', { style:'margin-top:16px;font-weight:600' }, 'Soal'),
+    el('div', { id:'qList', style:'margin-top:10px' }),
+    el('button', { class:'btn ghost', onclick:()=>addQuestion(course, materi) }, 'Tambah Soal'),
+    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
+      el('button', { class:'btn', onclick:()=>saveMateri(course, materi) }, 'Simpan'),
+      el('button', { class:'btn danger', onclick:()=>openCourseEditor(course) }, 'Kembali')
+    )
+  );
+
+  container.appendChild(wrap);
+  renderQuestions(course, materi);
+}
+
+function renderQuestions(course, materi) {
+  const list = qs('#qList');
+  list.innerHTML = '';
+
+  (materi.questions || []).forEach(q => list.appendChild(createQuestionRow(course, materi, q)));
+}
+
+function createQuestionRow(course, materi, q) {
+  return el('div', { class:'q-row' },
+    el('div', {},
+      el('div', { style:'font-weight:600' }, escapeHTML(q.question)),
+      el('div', { class:'muted', style:'font-size:12px' }, 'Kunci: ' + escapeHTML(q.correct || '-'))
+    ),
+    el('div', {},
+      el('button', { class:'btn sm ghost', onclick:()=>editQuestion(course, materi, q) }, 'Edit'),
+      el('button', { class:'btn sm danger', onclick:()=>deleteQuestion(course, materi, q) }, 'Hapus')
+    )
+  );
+}
+
+function addMateriRow(course) {
+  const newM = {
+    id: makeId('m-'),
+    title: 'Materi Baru',
+    description:'',
+    questions:[]
+  };
+  course.materi.push(newM);
+  renderMateriList(course);
+}
+
+function deleteMateri(course, materi) {
+  course.materi = course.materi.filter(m => m.id !== materi.id);
+  renderMateriList(course);
+}
+
+function addQuestion(course, materi) {
+  materi.questions.push({
+    id: makeId('q-'),
+    question:'Soal baru',
+    options:{A:'',B:'',C:'',D:''},
+    correct:'A',
+    explanation:''
+  });
+  renderQuestions(course, materi);
+}
+
+function deleteQuestion(course, materi, q) {
+  materi.questions = materi.questions.filter(x => x.id !== q.id);
+  renderQuestions(course, materi);
+}
+
+function editQuestion(course, materi, q) {
+  const container = qs('#contentInner');
+  container.innerHTML = '';
+
+  const wrap = el('div', { class:'wa-card' },
+    el('h3', {}, 'Edit Soal'),
+    el('label', {}, 'Pertanyaan'),
+    el('textarea', { id:'qText' }, q.question),
+    el('label', {}, 'Pilihan A'),
+    el('input', { id:'qA', value:q.options.A }),
+    el('label', {}, 'Pilihan B'),
+    el('input', { id:'qB', value:q.options.B }),
+    el('label', {}, 'Pilihan C'),
+    el('input', { id:'qC', value:q.options.C }),
+    el('label', {}, 'Pilihan D'),
+    el('input', { id:'qD', value:q.options.D }),
+    el('label', {}, 'Jawaban Benar (A/B/C/D)'),
+    el('input', { id:'qCorrect', value:q.correct }),
+    el('label', {}, 'Penjelasan'),
+    el('textarea', { id:'qExplain' }, q.explanation || ''),
+    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
+      el('button', { class:'btn', onclick:()=>saveQuestion(course, materi, q) }, 'Simpan'),
+      el('button', { class:'btn danger', onclick:()=>editMateri(course, materi) }, 'Kembali')
+    )
+  );
+
+  container.appendChild(wrap);
+}
+
+function saveQuestion(course, materi, q) {
+  q.question = qs('#qText').value;
+  q.options.A = qs('#qA').value;
+  q.options.B = qs('#qB').value;
+  q.options.C = qs('#qC').value;
+  q.options.D = qs('#qD').value;
+  q.correct = qs('#qCorrect').value.trim().toUpperCase();
+  q.explanation = qs('#qExplain').value;
+
+  editMateri(course, materi);
+}
+
+function saveMateri(course, materi) {
+  materi.title = qs('#materiTitle').value;
+  materi.description = qs('#materiDesc').value;
+  openCourseEditor(course);
+}
+
+// ----------------------- Save Course -----------------------
+async function saveCourseEditor(course) {
+  course.name = qs('#courseName').value;
+  course.description = qs('#courseDesc').value;
+
+  const res = await saveCourseRemote(course);
+  if (res.success) {
+    toast('Berhasil disimpan','success');
+    refreshAndRender();
+  } else {
+    toast('Gagal menyimpan','error');
+  }
+}
+
+async function deleteCourseConfirm(course) {
+  if (!confirm('Yakin ingin menghapus?')) return;
+  const res = await deleteCourseRemote(course.id);
+  if (res.success) {
+    toast('Berhasil dihapus','success');
+    refreshAndRender();
+  } else {
+    toast('Gagal menghapus','error');
+  }
+}
+
+// ----------------------- Data Refresh -----------------------
+async function refreshAndRender() {
+  const remote = await fetchCoursesRemote();
+  APP.courses = remote || readLocalData().courses;
+  navigateToView('dashboard');
+}
+
+// ----------------------- Auth State -----------------------
+onAuthStateChanged(auth, async (user) => {
+  APP.user = user;
+
+  const loginWrap = qs('#loginWrap');
+  const logoutWrap = qs('#logoutWrap');
+
+  if (!user) {
+    loginWrap.style.display = 'block';
+    logoutWrap.style.display = 'none';
+    qs('#contentInner').innerHTML = '<div class="muted">Silakan login</div>';
+    return;
+  }
+
+  const ok = await isAdminUidOrEmail(user.uid, user.email);
+  if (!ok) {
+    toast('Akses ditolak','error');
+    auth.signOut();
+    return;
+  }
+
+  qs('#signedEmail').textContent = user.email || '';
+  loginWrap.style.display = 'none';
+  logoutWrap.style.display = 'block';
+
+  await refreshAndRender();
+});
+
+// ----------------------- Init -----------------------
+document.addEventListener('DOMContentLoaded', () => {
+  buildShell();
+});
+
