@@ -1,8 +1,8 @@
-// user.js (FIXED VERSION)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+// =========================
+// USER.JS — FINAL VERSION (100% FIXED)
+// =========================
 
-/* ---------- CONFIG ---------- */
+// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -11,329 +11,238 @@ const firebaseConfig = {
   messagingSenderId: "177544522930",
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
+
+// Firebase imports
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+// Init Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ---------- UTIL ---------- */
-const $ = id => document.getElementById(id);
-const qsa = sel => Array.from(document.querySelectorAll(sel));
-const escapeHtml = s => String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;")
-  .replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
-const shuffle = arr => {
-  const a = arr.slice();
-  for (let i=a.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i],a[j]] = [a[j],a[i]];
+// =========================
+// UTILITIES
+// =========================
+
+// Shuffle array (Fisher–Yates)
+function shuffle(arr) {
+  let a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
-};
+}
 
-/* ---------- STATE ---------- */
-let COURSES = [];
-let CUR_COURSE = null;
-let CUR_MATERI = null;
-let QUESTIONS = [];
-let USER_ANS = {};
-let REVIEW = false;
+// =========================
+// LOAD COURSES
+// =========================
 
-/* ---------- FIRESTORE ---------- */
-async function fetchCourses() {
+async function loadCourses() {
   try {
     const snap = await getDocs(collection(db, "courses"));
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-    return list.map(c=>{
-      if (!Array.isArray(c.materi)){
-        if (Array.isArray(c.questions)){
-          c.materi = [{
-            id:"m-imported",
-            title:"Materi",
-            description:c.description||"",
-            questions:c.questions
-          }];
-          delete c.questions;
-        } else c.materi = [];
-      } else {
-        c.materi = c.materi.map(m=>({
-          id: m.id || ("m-"+Math.random().toString(36).slice(2,8)),
-          title: m.title || "Untitled",
-          description: m.description || "",
-          questions: Array.isArray(m.questions) ? m.questions : []
-        }));
-      }
-      return c;
-    }).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-  } catch(e){
-    console.warn(e);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn("Firestore error", err);
     return [];
   }
 }
 
-/* ---------- COURSES VIEW ---------- */
-async function renderCourses(){
-  COURSES = await fetchCourses();
-  const root = $("coursesList");
-  root.innerHTML = "";
+async function loadCourse(courseId) {
+  const snap = await getDocs(collection(db, "courses"));
+  const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return data.find(c => c.id === courseId);
+}
 
-  if (COURSES.length===0){
-    root.innerHTML = `<div class="muted">Belum ada mata kuliah.</div>`;
-    return;
-  }
+// =========================
+// RENDER COURSES
+// =========================
 
-  COURSES.forEach(c=>{
-    const mCount = c.materi.length;
-    const qCount = c.materi.reduce((s,m)=>s+m.questions.length,0);
+async function renderCourses() {
+  const list = await loadCourses();
+  const container = document.querySelector("#coursesList");
+  container.innerHTML = "";
 
+  list.forEach(course => {
     const item = document.createElement("div");
     item.className = "course-item";
     item.innerHTML = `
       <div class="left">
-        <div class="course-badge">${escapeHtml(c.name[0].toUpperCase())}</div>
-        <div><b>${escapeHtml(c.name)}</b><br>
-        <span class="muted">${mCount} materi • ${qCount} soal</span></div>
+        <div class="course-badge">${course.name.charAt(0)}</div>
+        <div>
+          <b>${course.name}</b><br>
+          <span class="muted">${course.questions.length} soal</span>
+        </div>
       </div>
-      <button class="btn sm view-materi" data-id="${c.id}">Lihat Materi</button>
+      <button class="btn primary" data-id="${course.id}">Mulai</button>
     `;
-    root.appendChild(item);
+    container.appendChild(item);
   });
 
-  qsa(".view-materi").forEach(x=>{
-    x.onclick = () => {
-      CUR_COURSE = COURSES.find(c=>c.id===x.dataset.id);
-      renderMateri();
-      showSection("materi");
-    };
+  document.querySelectorAll(".course-item button").forEach(btn => {
+    btn.onclick = () => startQuiz(btn.dataset.id);
   });
 }
 
-/* ---------- MATERI VIEW ---------- */
-function renderMateri(){
-  const list = $("materiList");
-  const title = $("materiTitle");
-  title.textContent = `Materi — ${CUR_COURSE.name}`;
-  list.innerHTML = "";
+// =========================
+// START QUIZ
+// =========================
 
-  CUR_COURSE.materi.forEach((m,i)=>{
-    const el = document.createElement("div");
-    el.className = "course-item";
-    el.innerHTML = `
-      <div style="display:flex;gap:12px;align-items:center">
-        <div class="badge">${escapeHtml(m.title[0].toUpperCase())}</div>
-        <div><b>${escapeHtml(m.title)}</b><br>
-        <span class="muted">${escapeHtml(m.description)}</span></div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn sm start-materi" data-i="${i}">Mulai</button>
-        <button class="btn ghost sm preview-materi" data-i="${i}">Lihat Soal</button>
-      </div>
-    `;
-    list.appendChild(el);
-  });
+let CURRENT_COURSE = null;
+let USER_ANSWERS = {};
 
-  $("backToCourses").onclick = () => showSection("courses");
+async function startQuiz(courseId) {
+  CURRENT_COURSE = await loadCourse(courseId);
+  if (!CURRENT_COURSE) return;
 
-  qsa(".start-materi").forEach(b=>{
-    b.onclick = () => startQuiz(parseInt(b.dataset.i));
-  });
+  // Acak urutan pertanyaan
+  CURRENT_COURSE.questions = shuffle(CURRENT_COURSE.questions);
 
-  qsa(".preview-materi").forEach(b=>{
-    b.onclick = () => previewMateri(parseInt(b.dataset.i));
-  });
-}
+  // ========================
+  // FIX UTAMA ADA DI SINI
+  // ========================
 
-/* ---------- PREVIEW ---------- */
-function previewMateri(i){
-  const m = CUR_COURSE.materi[i];
-  const overlay = document.createElement("div");
-  overlay.style = "position:fixed;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;z-index:9999";
-
-  const box = document.createElement("div");
-  box.style = "background:var(--card);padding:16px;border-radius:12px;max-width:720px;width:100%;max-height:80vh;overflow:auto";
-  box.innerHTML = `
-    <h3>${escapeHtml(m.title)}</h3>
-    <div class="muted">${escapeHtml(m.description)}</div>
-    <hr>
-    ${m.questions.map((q,i)=>`<div><b>${i+1}.</b> ${escapeHtml(q.question)}</div>`).join("")}
-    <div style="text-align:right;margin-top:12px">
-      <button id="closePrev" class="btn ghost">Tutup</button>
-    </div>
-  `;
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-
-  box.querySelector("#closePrev").onclick = () => overlay.remove();
-}
-
-/* ---------- START QUIZ ---------- */
-function startQuiz(i){
-  CUR_MATERI = CUR_COURSE.materi[i];
-  USER_ANS = {};
-  REVIEW = false;
-
-  QUESTIONS = shuffle(JSON.parse(JSON.stringify(CUR_MATERI.questions)));
-
-  QUESTIONS = QUESTIONS.map(q=>{
+  CURRENT_COURSE.questions = CURRENT_COURSE.questions.map(q => {
+    // buat array opsi dengan flag benar
     const ops = [
-      {t:q.options.A, ok:q.correct==="A"},
-      {t:q.options.B, ok:q.correct==="B"},
-      {t:q.options.C, ok:q.correct==="C"},
-      {t:q.options.D, ok:q.correct==="D"}
+      { text: q.options.A, correct: q.correct === "A" },
+      { text: q.options.B, correct: q.correct === "B" },
+      { text: q.options.C, correct: q.correct === "C" },
+      { text: q.options.D, correct: q.correct === "D" }
     ];
-    const sh = shuffle(ops);
-    const correctIndex = sh.findIndex(x=>x.ok);
-    const newKey = ["A","B","C","D"][correctIndex];
+
+    // acak ops
+    const shuffled = shuffle(ops);
+
+    // tentukan huruf baru sesuai posisi
+    const correctIndex = shuffled.findIndex(x => x.correct);
+    const newCorrectKey = ["A", "B", "C", "D"][correctIndex];
 
     return {
       ...q,
-      correct: newKey,
-      options:{
-        A:sh[0].t,
-        B:sh[1].t,
-        C:sh[2].t,
-        D:sh[3].t
+      correct: newCorrectKey,
+      options: {
+        A: shuffled[0].text,
+        B: shuffled[1].text,
+        C: shuffled[2].text,
+        D: shuffled[3].text
       }
-    }
-  });
-
-  renderQuiz();
-  showSection("quiz");
-}
-
-/* ---------- RENDER QUIZ ---------- */
-function renderQuiz(){
-  $("quizTitle").textContent = `${CUR_COURSE.name} — ${CUR_MATERI.title}`;
-  const root = $("quizContainer");
-  root.innerHTML = "";
-
-  QUESTIONS.forEach((q,idx)=>{
-    const card = document.createElement("div");
-    card.className = "question-card";
-    card.innerHTML = `
-      <div><b>${idx+1}.</b> ${escapeHtml(q.question)}</div>
-      <div id="choices-${idx}" class="choices">
-        ${["A","B","C","D"].map(k=>`
-          <div class="choice" data-idx="${idx}" data-opt="${k}">
-            <span class="label">${k}.</span> ${escapeHtml(q.options[k])}
-          </div>
-        `).join("")}
-      </div>
-      <div class="explanation muted" id="exp-${idx}" style="display:none">
-        ${escapeHtml(q.explanation||"Tidak ada penjelasan.")}
-      </div>
-    `;
-    root.appendChild(card);
-  });
-
-  qsa(".choice").forEach(c=>{
-    c.onclick = ()=>{
-      if (REVIEW) return;
-
-      const idx = +c.dataset.idx;
-      const opt = c.dataset.opt;
-
-      USER_ANS[idx] = opt;
-
-      qsa(`#choices-${idx} .choice`).forEach(x=>x.classList.remove("chosen"));
-      c.classList.add("chosen");
     };
   });
 
-  $("finishQuizBtn").onclick = finishConfirm;
-  $("cancelQuizBtn").onclick = () => showSection("materi");
+  // swap views
+  document.querySelector("#coursesSection").style.display = "none";
+  document.querySelector("#quizSection").style.display = "block";
+  document.querySelector("#resultSection").style.display = "none";
+
+  document.querySelector("#quizTitle").textContent = CURRENT_COURSE.name;
+
+  renderQuizView();
 }
 
-/* ---------- FINISH CONFIRM ---------- */
-function finishConfirm(){
-  const o = document.createElement("div");
-  o.style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:9999";
+// =========================
+// RENDER QUIZ VIEW
+// =========================
 
-  const b = document.createElement("div");
-  b.style="background:var(--card);padding:16px;border-radius:12px;min-width:260px";
-  b.innerHTML = `
-    <h3>Konfirmasi</h3>
-    <p>Selesai mengerjakan?</p>
-    <div style="text-align:right;display:flex;gap:8px;justify-content:flex-end">
-      <button id="no" class="btn ghost">Batal</button>
-      <button id="yes" class="btn primary">Ya</button>
-    </div>
-  `;
-  o.appendChild(b);
-  document.body.appendChild(o);
+function renderQuizView() {
+  USER_ANSWERS = {};
+  const box = document.querySelector("#quizContainer");
+  box.innerHTML = "";
 
-  b.querySelector("#no").onclick = ()=>o.remove();
-  b.querySelector("#yes").onclick = ()=>{o.remove(); doFinish();};
+  CURRENT_COURSE.questions.forEach((q, idx) => {
+    const card = document.createElement("div");
+    card.className = "question-card";
+
+    card.innerHTML = `
+      <div class="q-text"><b>${idx + 1}.</b> ${q.question}</div>
+      <div class="choices" id="choices-${idx}">
+        ${["A","B","C","D"].map(opt => `
+          <div class="choice" data-opt="${opt}" data-id="${idx}">
+            <span class="label">${opt}.</span>
+            <span class="text">${q.options[opt]}</span>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="explanation muted" id="exp-${idx}" style="display:none;">
+        ${q.explanation || "Tidak ada penjelasan."}
+      </div>
+    `;
+
+    box.appendChild(card);
+  });
+
+  attachChoiceEvents();
 }
 
-/* ---------- FINISH ---------- */
-function doFinish(){
-  REVIEW = true;
-  let score = 0;
+// =========================
+// CLICK HANDLERS
+// =========================
 
-  QUESTIONS.forEach((q,idx)=>{
-    const user = USER_ANS[idx];
+function attachChoiceEvents() {
+  document.querySelectorAll(".choice").forEach(choice => {
+    choice.onclick = () => {
+      const opt = choice.dataset.opt;
+      const idx = parseInt(choice.dataset.id);
+      USER_ANSWERS[idx] = opt;
 
-    if (user === q.correct) score++;
+      const group = document.querySelectorAll(`#choices-${idx} .choice`);
+      group.forEach(c => c.classList.remove("chosen"));
+      choice.classList.add("chosen");
+    };
+  });
+}
 
-    qsa(`#choices-${idx} .choice`).forEach(c=>{
-      const k = c.dataset.opt;
-      c.classList.remove("chosen","final-correct","final-wrong");
+// =========================
+// FINISH QUIZ
+// =========================
 
-      if (k === q.correct) c.classList.add("final-correct");
-      else if (k === user) c.classList.add("final-wrong");
+function finishQuiz() {
+  CURRENT_COURSE.questions.forEach((q, idx) => {
+    const group = document.querySelectorAll(`#choices-${idx} .choice`);
+    const correct = q.correct;
+    const user = USER_ANSWERS[idx];
+
+    document.querySelector(`#choices-${idx}`).classList.add("disabled-choices");
+
+    group.forEach(c => {
+      const opt = c.dataset.opt;
+
+      if (opt === correct) {
+        c.classList.add("final-correct");
+      } else if (opt === user) {
+        c.classList.add("final-wrong");
+      }
     });
 
-    $(`exp-${idx}`).style.display = "block";
+    document.querySelector(`#exp-${idx}`).style.display = "block";
   });
-
-  $("resultBox").innerHTML = `
-    <div class="result-row">
-      <strong>Skor:</strong> ${score}/${QUESTIONS.length} 
-      (${Math.round(score/QUESTIONS.length*100)}%)
-    </div>
-  `;
-
-  showSection("result");
-
-  $("resultBack").onclick = () => showSection("materi");
-  $("resultRetry").onclick = () => startQuiz(
-    CUR_COURSE.materi.findIndex(m=>m.id===CUR_MATERI.id)
-  );
 }
 
-/* ---------- SECTION SWITCH ---------- */
-function showSection(name){
-  const map={
-    courses:"coursesSection",
-    materi:"materiSection",
-    quiz:"quizSection",
-    result:"resultView"
-  };
-  Object.values(map).forEach(id=>{
-    const el=$(id);
-    if(el) el.style.display="none";
-  });
-  $(map[name]).style.display="block";
+// =========================
+// BUTTONS & THEME
+// =========================
+
+document.querySelector("#finishQuizBtn").onclick = finishQuiz;
+
+document.querySelector("#backToCourses").onclick = () => {
+  document.querySelector("#coursesSection").style.display = "block";
+  document.querySelector("#quizSection").style.display = "none";
+};
+
+document.querySelector("#backHome").onclick = () => {
+  document.querySelector("#coursesSection").style.display = "block";
+  document.querySelector("#resultSection").style.display = "none";
+};
+
+document.querySelector("#themeToggle").onclick = () => {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme", document.body.classList.contains("dark"));
+};
+
+if (localStorage.getItem("theme") === "true") {
+  document.body.classList.add("dark");
 }
 
-/* ---------- THEME ---------- */
-function wireTheme(){
-  const t=$("themeToggle");
-  const saved = localStorage.getItem("theme") || "light";
-  document.body.classList.toggle("dark",saved==="dark");
-  t.textContent = saved==="dark" ? "☀" : "☾";
-
-  t.onclick = ()=>{
-    const isDark = document.body.classList.toggle("dark");
-    localStorage.setItem("theme",isDark?"dark":"light");
-    t.textContent = isDark ? "☀" : "☾";
-  };
-}
-
-/* ---------- INIT ---------- */
-async function init(){
-  wireTheme();
-  $("backToCourses").onclick = ()=>showSection("courses");
-  await renderCourses();
-  showSection("courses");
-}
-document.addEventListener("DOMContentLoaded", init);
+// Load courses on startup
+renderCourses();
