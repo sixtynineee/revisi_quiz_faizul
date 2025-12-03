@@ -134,13 +134,13 @@ body{
   transform:translateY(-1px);
 }
 
-/* Saat Disable setelah selesai */
+/* Disable choices setelah selesai */
 .choices.disabled-choices{
   pointer-events:none;
   opacity:.95;
 }
 
-/* Penilaian jawaban */
+/* Benar / Salah */
 .choice.final-correct{
   background:linear-gradient(180deg, rgba(0,168,132,0.18), rgba(0,168,132,0.08));
   border-color:rgba(0,168,132,0.4);
@@ -150,7 +150,7 @@ body{
   border-color:rgba(255,107,107,0.35);
 }
 
-/* Result Section */
+/* Result */
 .result-row{
   margin:10px 0;
   padding:12px;
@@ -184,44 +184,37 @@ textarea,input,select{
 .muted{ color:var(--muted);font-size:13px }
 .actions-row{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px }
 
-
 /* =========================
-   PAGE TRANSITIONS & WHATSAPP-LIKE MICRO-UX
-   (paste this at the BOTTOM of your style.css)
-   ========================= */
+   PAGE TRANSITIONS & WHATSAPP UX
+========================= */
 
-/* Container/page transitions */
 .section {
   will-change: transform, opacity;
   transition: transform 320ms cubic-bezier(.22,.9,.34,1), opacity 260ms ease;
   transform-origin: top center;
 }
 
-/* initial hidden state (for entering) */
 .section.hidden {
   opacity: 0;
   pointer-events: none;
   transform: translateY(12px) scale(0.995);
 }
 
-/* visible state */
 .section.visible {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
-/* outgoing animation (slide up & fade) */
 .section.exiting {
   opacity: 0;
   transform: translateY(-10px) scale(0.995);
   pointer-events: none;
 }
 
-/* modal */
 #confirmModal {
   z-index: 12000;
-  display: none; /* shown via JS */
+  display: none;
   align-items: center;
   justify-content: center;
 }
@@ -231,15 +224,12 @@ textarea,input,select{
   opacity: 0;
   transition: transform 260ms cubic-bezier(.22,.9,.34,1), opacity 220ms ease;
 }
-#confirmModal.show {
-  display: flex;
-}
+#confirmModal.show { display: flex; }
 #confirmModal.show .modal-card {
   transform: translateY(0) scale(1);
   opacity: 1;
 }
 
-/* toast */
 .wa-toast {
   transition: transform 240ms cubic-bezier(.22,.9,.34,1), opacity 220ms;
   transform: translateY(-8px);
@@ -250,53 +240,144 @@ textarea,input,select{
   opacity: 0;
 }
 
-/* list enter animation for course items */
+/* course item animation */
 .course-item {
   transform-origin: left center;
   transition: transform 360ms cubic-bezier(.2,.9,.3,1), opacity 260ms ease;
   opacity: 1;
 }
-.course-item.new-item {
-  transform: translateX(-8px);
-  opacity: 0;
-}
-.course-item.shown {
-  transform: translateX(0);
-  opacity: 1;
-}
+.course-item.new-item { transform: translateX(-8px); opacity: 0; }
+.course-item.shown { transform: translateX(0); opacity: 1; }
 
-/* subtle button press */
+/* button micro interactions */
 .btn {
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 .btn:active { transform: translateY(1px) scale(.995); }
 
-/* quiz card micro interactions */
-.question-card {
-  transition: box-shadow 220ms, transform 220ms;
-}
+/* hover animations */
 .question-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
 
-/* choice hover micro interaction */
-.choice {
-  transition: transform 160ms cubic-bezier(.2,.9,.3,1), box-shadow 160ms;
-}
 .choice:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.2); }
 
-/* reviewContainer fade in */
+/* review fade */
 #reviewContainer { opacity:0; transform: translateY(8px); transition: opacity 260ms, transform 260ms; }
 #reviewContainer.visible { opacity:1; transform: translateY(0); }
 
-/* responsiveness for result panel - ensure it stacks on mobile */
-@media (max-width:900px){
-  #resultSection { position: static; width: 100%; margin-top: 12px; }
+/* ============================
+   ADMIN PANEL DARK MODE SUPPORT
+============================ */
+
+.wa-root,
+.wa-sidebar,
+.wa-main,
+.wa-card {
+  background: var(--card) !important;
+  color: var(--text) !important;
+  border-color: rgba(255,255,255,0.06) !important;
 }
 
-/* accessibility: reduce motion */
-@media (prefers-reduced-motion: reduce) {
-  .section, #confirmModal .modal-card, .wa-toast, .course-item, .question-card, .choice { transition: none !important; transform: none !important; opacity: 1 !important; }
+.wa-sidebar {
+  box-shadow: var(--soft-shadow) !important;
 }
 
+.wa-card {
+  box-shadow: var(--soft-shadow) !important;
+}
+
+.badge {
+  background: rgba(255,255,255,0.05) !important;
+  color: var(--accent) !important;
+}
+
+.menu button {
+  background: transparent !important;
+  color: var(--text) !important;
+  border-radius: 10px !important;
+}
+
+.menu button:hover {
+  background: rgba(255,255,255,0.06) !important;
+}
+
+.menu button.active {
+  background: rgba(255,255,255,0.12) !important;
+}
+
+.materi-row {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 10px !important;
+  padding: 12px !important;
+}
+
+.materi-title {
+  font-weight: 600 !important;
+  color: var(--text) !important;
+}
+
+.q-row {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 10px !important;
+  padding: 10px !important;
+}
+
+input, textarea, select {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  color: var(--text) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent) !important;
+}
+
+#wa_modal_root > div {
+  backdrop-filter: blur(3px) brightness(0.6) !important;
+}
+
+.wa-toast {
+  background: var(--accent) !important;
+  color: white !important;
+  border-radius: 10px !important;
+}
+
+.btn.ghost {
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+.btn.ghost:hover {
+  background: rgba(255,255,255,0.06) !important;
+}
+
+.btn {
+  background: var(--accent) !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.btn.danger {
+  background: var(--danger) !important;
+  color: #fff !important;
+}
+
+.course-item {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+.course-item:hover {
+  background: rgba(255,255,255,0.06) !important;
+}
