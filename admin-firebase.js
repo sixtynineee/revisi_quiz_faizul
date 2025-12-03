@@ -1,380 +1,316 @@
-// =============================
-// ADMIN FIREBASE JS (FINAL)
-// =============================
+// admin-firebase.js (FINAL)
+// Firebase Modular SDK
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, deleteDoc, doc,
+  getDocs, updateDoc, query, orderBy, where
+} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
-import { 
-  initializeApp 
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-
-import { 
-  getFirestore, collection, doc,
-  getDocs, addDoc, updateDoc, deleteDoc 
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-
-/* ---------- CONFIG FIREBASE ---------- */
+// -------------------------------------------------------
+// 0. Firebase Config (ISI PUNYA KAMU SENDIRI)
+// -------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
-  authDomain: "quizappfaizul.firebaseapp.com",
-  projectId: "quizappfaizul",
-  storageBucket: "quizappfaizul.firebasestorage.app",
-  messagingSenderId: "177544522930",
-  appId: "1:177544522930:web:354794b407cf29d86cedab"
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
 };
 
+// -------------------------------------------------------
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ---------- ELEMENT UTILITY ---------- */
-const $ = id => document.getElementById(id);
+// -------------------------------------------------------
+// 1. Admin Panel Elements
+// -------------------------------------------------------
+const coursesView = document.getElementById("coursesView");
+const coursesAdminList = document.getElementById("coursesAdminList");
+const btnAddCourse = document.getElementById("addCourseBtn");
 
-/* ---------------------------------------------------
-   LOAD SEMUA MATA KULIAH
-----------------------------------------------------*/
+const materiPanel = document.getElementById("materiPanel");
+const materiList = document.getElementById("materiList");
+const materiCourseTitle = document.getElementById("materiCourseTitle");
+const btnAddMateri = document.getElementById("addMateriBtn");
+
+const soalPanel = document.getElementById("soalPanel");
+const soalList = document.getElementById("soalList");
+const soalMateriTitle = document.getElementById("soalMateriTitle");
+const btnAddSoal = document.getElementById("addSoalBtn");
+
+let selectedCourseId = null;
+let selectedMateriId = null;
+
+// -------------------------------------------------------
+// 2. Load Courses
+// -------------------------------------------------------
 async function loadCourses() {
-  const root = $("coursesAdminList");
-  root.innerHTML = "<div class='muted'>Memuat...</div>";
+  coursesAdminList.innerHTML = `<p class="muted">Memuat...</p>`;
+  const q = query(collection(db, "courses"), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
 
-  const snap = await getDocs(collection(db, "courses"));
+  if (snap.empty) {
+    coursesAdminList.innerHTML = `<p class="muted">Belum ada mata kuliah.</p>`;
+    return;
+  }
 
-  root.innerHTML = "";
-
+  coursesAdminList.innerHTML = "";
   snap.forEach(docSnap => {
-    const c = docSnap.data();
-    const cid = docSnap.id;
+    const d = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "admin-item";
 
-    const materiCount = Array.isArray(c.materi) ? c.materi.length : 0;
-
-    const el = document.createElement("div");
-    el.className = "admin-item";
-    el.innerHTML = `
+    item.innerHTML = `
       <div>
-        <b>${c.name}</b><br>
-        <span class="muted">${materiCount} materi</span>
+        <div style="font-weight:600">${d.name}</div>
+        <div class="muted" style="font-size:12px">${d.desc || ""}</div>
       </div>
-
       <div class="admin-actions">
-        <button class="btn sm" data-edit="${cid}">Edit</button>
-        <button class="btn sm" data-materi="${cid}">Materi</button>
-        <button class="btn sm red" data-del="${cid}">Hapus</button>
+        <button class="btn sm" data-open="${docSnap.id}">Materi</button>
+        <button class="btn ghost sm" data-edit="${docSnap.id}">✎</button>
+        <button class="btn ghost sm" data-del="${docSnap.id}">🗑</button>
       </div>
     `;
 
-    root.appendChild(el);
-  });
+    // open materi panel
+    item.querySelector(`[data-open]`).addEventListener("click", () => {
+      openMateri(docSnap.id, d.name);
+    });
 
-  // Wiring tombol
-  qsa("[data-edit]").forEach(btn => {
-    btn.onclick = () => openEditCourse(btn.dataset.edit);
-  });
+    // edit course
+    item.querySelector(`[data-edit]`).addEventListener("click", async () => {
+      const newName = prompt("Nama Mata Kuliah:", d.name);
+      if (!newName) return;
+      await updateDoc(doc(db, "courses", docSnap.id), {
+        name: newName
+      });
+      loadCourses();
+    });
 
-  qsa("[data-materi]").forEach(btn => {
-    btn.onclick = () => openMateri(btn.dataset.materi);
-  });
+    // delete course
+    item.querySelector(`[data-del]`).addEventListener("click", async () => {
+      if (!confirm("Hapus mata kuliah ini? Semua materi & soal ikut terhapus.")) return;
 
-  qsa("[data-del]").forEach(btn => {
-    btn.onclick = () => deleteCourse(btn.dataset.del);
+      // delete all materi under this course
+      const materiQ = query(collection(db, "materi"), where("courseId", "==", docSnap.id));
+      const materiSnap = await getDocs(materiQ);
+
+      for (const m of materiSnap.docs) {
+        // delete soal inside materi
+        const soalQ = query(collection(db, "soal"), where("materiId", "==", m.id));
+        const soalSnap = await getDocs(soalQ);
+        for (const s of soalSnap.docs) {
+          await deleteDoc(doc(db, "soal", s.id));
+        }
+        await deleteDoc(doc(db, "materi", m.id));
+      }
+
+      await deleteDoc(doc(db, "courses", docSnap.id));
+      materiPanel.style.display = "none";
+      soalPanel.style.display = "none";
+      loadCourses();
+    });
+
+    coursesAdminList.appendChild(item);
   });
 }
 
-const qsa = sel => Array.from(document.querySelectorAll(sel));
-
-/* ---------------------------------------------------
-   TAMBAH MATA KULIAH
-----------------------------------------------------*/
-$("addCourseBtn").onclick = async () => {
-  const name = prompt("Nama mata kuliah?");
+// -------------------------------------------------------
+// 3. Add Course
+// -------------------------------------------------------
+btnAddCourse.addEventListener("click", async () => {
+  const name = prompt("Nama Mata Kuliah:");
   if (!name) return;
 
   await addDoc(collection(db, "courses"), {
     name,
-    description: "",
-    materi: []
+    createdAt: Date.now()
   });
 
   loadCourses();
-};
+});
 
-/* ---------------------------------------------------
-   EDIT MATA KULIAH
-----------------------------------------------------*/
-async function openEditCourse(id) {
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
+// -------------------------------------------------------
+// 4. Open Materi Panel
+// -------------------------------------------------------
+async function openMateri(courseId, name) {
+  selectedCourseId = courseId;
+  selectedMateriId = null;
+  materiCourseTitle.textContent = `Materi — ${name}`;
+  materiPanel.style.display = "block";
+  soalPanel.style.display = "none";
 
-  snap.forEach(s => {
-    if (s.id === id) course = { id: s.id, ...s.data() };
-  });
-
-  if (!course) return alert("Data tidak ditemukan.");
-
-  const newName = prompt("Edit nama:", course.name);
-  if (!newName) return;
-
-  await updateDoc(doc(db, "courses", id), {
-    name: newName
-  });
-
-  loadCourses();
+  loadMateri(courseId);
 }
 
-/* ---------------------------------------------------
-   HAPUS MATA KULIAH
-----------------------------------------------------*/
-async function deleteCourse(id) {
-  if (!confirm("Yakin hapus mata kuliah ini?")) return;
-  await deleteDoc(doc(db, "courses", id));
-  loadCourses();
-}
+async function loadMateri(courseId) {
+  materiList.innerHTML = `<p class="muted">Memuat...</p>`;
+  const q = query(collection(db, "materi"), where("courseId", "==", courseId));
+  const snap = await getDocs(q);
 
-/* ---------------------------------------------------
-   BUKA DAFTAR MATERI
-----------------------------------------------------*/
-async function openMateri(courseId) {
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
+  if (snap.empty) {
+    materiList.innerHTML = `<p class="muted">Belum ada materi.</p>`;
+    return;
+  }
 
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
+  materiList.innerHTML = "";
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "admin-item";
 
-  if (!course) return alert("Tidak ditemukan");
-
-  $("materiPanel").style.display = "block";
-  $("materiCourseTitle").textContent = course.name;
-  $("materiList").innerHTML = "";
-
-  const list = course.materi || [];
-
-  list.forEach((m, i) => {
-    const el = document.createElement("div");
-    el.className = "admin-item";
-    el.innerHTML = `
+    item.innerHTML = `
       <div>
-        <b>${m.title}</b><br>
-        <span class="muted">${m.questions.length} soal</span>
+        <div style="font-weight:600">${d.title}</div>
+        <div class="muted" style="font-size:12px">${d.desc || ""}</div>
       </div>
-
       <div class="admin-actions">
-        <button class="btn sm" data-edit-m="${i}" data-course="${courseId}">Edit</button>
-        <button class="btn sm" data-soal-m="${i}" data-course="${courseId}">Soal</button>
-        <button class="btn sm red" data-del-m="${i}" data-course="${courseId}">Hapus</button>
+        <button class="btn sm" data-open="${docSnap.id}">Soal</button>
+        <button class="btn ghost sm" data-edit="${docSnap.id}">✎</button>
+        <button class="btn ghost sm" data-del="${docSnap.id}">🗑</button>
       </div>
     `;
 
-    $("materiList").appendChild(el);
-  });
+    // open soal panel
+    item.querySelector(`[data-open]`).addEventListener("click", () => {
+      openSoal(docSnap.id, d.title);
+    });
 
-  // Wiring
-  qsa("[data-edit-m]").forEach(btn => {
-    btn.onclick = () => editMateri(courseId, btn.dataset.editM);
-  });
+    // edit
+    item.querySelector(`[data-edit]`).addEventListener("click", async () => {
+      const newTitle = prompt("Judul Materi:", d.title);
+      if (!newTitle) return;
+      await updateDoc(doc(db, "materi", docSnap.id), {
+        title: newTitle
+      });
+      loadMateri(courseId);
+    });
 
-  qsa("[data-del-m]").forEach(btn => {
-    btn.onclick = () => deleteMateri(courseId, btn.dataset.delM);
-  });
+    // delete
+    item.querySelector(`[data-del]`).addEventListener("click", async () => {
+      if (!confirm("Hapus materi beserta soal?")) return;
 
-  qsa("[data-soal-m]").forEach(btn => {
-    btn.onclick = () => openSoal(courseId, btn.dataset.soalM);
-  });
+      // delete soal
+      const soalQ = query(collection(db, "soal"), where("materiId", "==", docSnap.id));
+      const soalSnap = await getDocs(soalQ);
+      for (const s of soalSnap.docs) {
+        await deleteDoc(doc(db, "soal", s.id));
+      }
 
-  $("addMateriBtn").onclick = () => addMateri(courseId);
+      await deleteDoc(doc(db, "materi", docSnap.id));
+      soalPanel.style.display = "none";
+      loadMateri(courseId);
+    });
+
+    materiList.appendChild(item);
+  });
 }
 
-/* ---------------------------------------------------
-   TAMBAH MATERI
-----------------------------------------------------*/
-async function addMateri(courseId) {
-  const title = prompt("Judul materi?");
-  if (!title) return;
+// -------------------------------------------------------
+// 5. Add Materi
+// -------------------------------------------------------
+btnAddMateri.addEventListener("click", async () => {
+  const name = prompt("Judul Materi:");
+  if (!name) return;
 
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
+  await addDoc(collection(db, "materi"), {
+    courseId: selectedCourseId,
+    title: name,
+    createdAt: Date.now()
   });
 
-  course.materi.push({
-    id: "m-" + Math.random().toString(36).slice(2, 8),
-    title,
-    description: "",
-    questions: []
-  });
+  loadMateri(selectedCourseId);
+});
 
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
-
-  openMateri(courseId);
+// -------------------------------------------------------
+// 6. Open Soal Panel
+// -------------------------------------------------------
+async function openSoal(materiId, title) {
+  selectedMateriId = materiId;
+  soalPanel.style.display = "block";
+  soalMateriTitle.textContent = `Soal — ${title}`;
+  loadSoal(materiId);
 }
 
-/* ---------------------------------------------------
-   EDIT MATERI
-----------------------------------------------------*/
-async function editMateri(courseId, materiIndex) {
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
+async function loadSoal(materiId) {
+  soalList.innerHTML = `<p class="muted">Memuat...</p>`;
+  const q = query(collection(db, "soal"), where("materiId", "==", materiId));
+  const snap = await getDocs(q);
 
-  const m = course.materi[materiIndex];
+  if (snap.empty) {
+    soalList.innerHTML = `<p class="muted">Belum ada soal.</p>`;
+    return;
+  }
 
-  const newTitle = prompt("Edit judul:", m.title);
-  if (!newTitle) return;
+  soalList.innerHTML = "";
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "admin-item";
 
-  m.title = newTitle;
-
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
-
-  openMateri(courseId);
-}
-
-/* ---------------------------------------------------
-   HAPUS MATERI
-----------------------------------------------------*/
-async function deleteMateri(courseId, materiIndex) {
-  if (!confirm("Hapus materi ini?")) return;
-
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
-
-  course.materi.splice(materiIndex, 1);
-
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
-
-  openMateri(courseId);
-}
-
-/* ---------------------------------------------------
-   BUKA SOAL
-----------------------------------------------------*/
-async function openSoal(courseId, materiIndex) {
-  $("soalPanel").style.display = "block";
-
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
-
-  const materi = course.materi[materiIndex];
-
-  $("soalMateriTitle").textContent = materi.title;
-
-  const root = $("soalList");
-  root.innerHTML = "";
-
-  materi.questions.forEach((q, i) => {
-    const el = document.createElement("div");
-    el.className = "admin-item";
-    el.innerHTML = `
-      <div><b>${i + 1}.</b> ${q.question}</div>
+    item.innerHTML = `
+      <div>
+        <div style="font-weight:600">${d.question}</div>
+        <div class="muted" style="font-size:12px">Jawaban Benar: ${d.correct}</div>
+      </div>
       <div class="admin-actions">
-        <button class="btn sm" data-edit-q="${i}" data-course="${courseId}" data-m="${materiIndex}">Edit</button>
-        <button class="btn sm red" data-del-q="${i}" data-course="${courseId}" data-m="${materiIndex}">Hapus</button>
+        <button class="btn ghost sm" data-edit="${docSnap.id}">✎</button>
+        <button class="btn ghost sm" data-del="${docSnap.id}">🗑</button>
       </div>
     `;
 
-    root.appendChild(el);
-  });
+    // edit soal
+    item.querySelector(`[data-edit]`).addEventListener("click", async () => {
+      const qText = prompt("Teks soal:", d.question);
+      if (!qText) return;
 
-  $("addSoalBtn").onclick = () => addSoal(courseId, materiIndex);
+      const correct = prompt("Jawaban benar:", d.correct);
+      if (!correct) return;
 
-  qsa("[data-edit-q]").forEach(btn => {
-    btn.onclick = () =>
-      editSoal(courseId, btn.dataset.m, btn.dataset.editQ);
-  });
+      await updateDoc(doc(db, "soal", docSnap.id), {
+        question: qText,
+        correct
+      });
 
-  qsa("[data-del-q]").forEach(btn => {
-    btn.onclick = () =>
-      deleteSoal(courseId, btn.dataset.m, btn.dataset.delQ);
+      loadSoal(materiId);
+    });
+
+    // delete soal
+    item.querySelector(`[data-del]`).addEventListener("click", async () => {
+      if (!confirm("Hapus soal?")) return;
+
+      await deleteDoc(doc(db, "soal", docSnap.id));
+      loadSoal(materiId);
+    });
+
+    soalList.appendChild(item);
   });
 }
 
-/* ---------------------------------------------------
-   TAMBAH SOAL
-----------------------------------------------------*/
-async function addSoal(courseId, materiIndex) {
-  const qText = prompt("Isi soal:");
+// -------------------------------------------------------
+// 7. Add Soal
+// -------------------------------------------------------
+btnAddSoal.addEventListener("click", async () => {
+  const qText = prompt("Teks soal:");
   if (!qText) return;
 
-  const a = prompt("Opsi A:");
-  const b = prompt("Opsi B:");
-  const c = prompt("Opsi C:");
-  const d = prompt("Opsi D:");
+  const correct = prompt("Jawaban benar:");
+  if (!correct) return;
 
-  const correct = prompt("Jawaban benar (A/B/C/D):").toUpperCase();
-  const explanation = prompt("Penjelasan:");
-
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
-
-  course.materi[materiIndex].questions.push({
+  await addDoc(collection(db, "soal"), {
+    materiId: selectedMateriId,
     question: qText,
-    options: { A: a, B: b, C: c, D: d },
     correct,
-    explanation
+    createdAt: Date.now()
   });
 
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
+  loadSoal(selectedMateriId);
+});
 
-  openSoal(courseId, materiIndex);
+// -------------------------------------------------------
+// Init Render
+// -------------------------------------------------------
+if (coursesView) {
+  loadCourses();
 }
-
-/* ---------------------------------------------------
-   EDIT SOAL
-----------------------------------------------------*/
-async function editSoal(courseId, materiIndex, qIndex) {
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
-
-  const q = course.materi[materiIndex].questions[qIndex];
-
-  const newQ = prompt("Soal:", q.question);
-  if (!newQ) return;
-
-  q.question = newQ;
-  q.options.A = prompt("Opsi A:", q.options.A);
-  q.options.B = prompt("Opsi B:", q.options.B);
-  q.options.C = prompt("Opsi C:", q.options.C);
-  q.options.D = prompt("Opsi D:", q.options.D);
-
-  q.correct = prompt("Jawaban benar:", q.correct).toUpperCase();
-  q.explanation = prompt("Penjelasan:", q.explanation);
-
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
-
-  openSoal(courseId, materiIndex);
-}
-
-/* ---------------------------------------------------
-   HAPUS SOAL
-----------------------------------------------------*/
-async function deleteSoal(courseId, materiIndex, qIndex) {
-  if (!confirm("Hapus soal ini?")) return;
-
-  const snap = await getDocs(collection(db, "courses"));
-  let course = null;
-  snap.forEach(s => {
-    if (s.id === courseId) course = { id: s.id, ...s.data() };
-  });
-
-  course.materi[materiIndex].questions.splice(qIndex, 1);
-
-  await updateDoc(doc(db, "courses", courseId), { materi: course.materi });
-
-  openSoal(courseId, materiIndex);
-}
-
-/* ---------------------------------------------------
-   INIT
-----------------------------------------------------*/
-document.addEventListener("DOMContentLoaded", loadCourses);
