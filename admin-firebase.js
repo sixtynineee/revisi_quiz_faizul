@@ -1,586 +1,308 @@
-// admin-firebase.js (FULL) - Admin login (email-only) + Course/Materi/Soal CRUD
-// Replace firebaseConfig values with yours if needed.
+/* ============================================================
+   ADMIN PANEL — FIREBASE LOGIC
+   Revisi lengkap sesuai permintaan
+============================================================ */
 
-// -------------------- FIREBASE CONFIG --------------------
+// ----------------------- Firebase Init -----------------------
 const firebaseConfig = {
-  apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
-  authDomain: "quizappfaizul.firebaseapp.com",
-  projectId: "quizappfaizul",
-  storageBucket: "quizappfaizul.firebasestorage.app",
-  messagingSenderId: "177544522930",
-  appId: "1:177544522930:web:354794b407cf29d86cedab"
+  apiKey: "AIzaSyDIEwBr055gsYE3UjcmmRfTthmuxqmd2LA",
+  authDomain: "edu-campus-a9435.firebaseapp.com",
+  projectId: "edu-campus-a9435",
+  storageBucket: "edu-campus-a9435.appspot.com",
+  messagingSenderId: "584109531139",
+  appId: "1:584109531139:web:7ea42345325cfae5ac8b1b",
+  measurementId: "G-S6VVKVT7JL"
 };
 
-// -------------------- IMPORTS (CDN modular) --------------------
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  getDoc,
-  Timestamp
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+const app = firebase.initializeApp(firebaseConfig);
+const auth = firebase.getAuth(app);
+const db = firebase.getFirestore(app);
 
-// -------------------- INIT --------------------
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// ----------------------- APP Data -----------------------
+let APP = {
+  user: null,
+  courses: [],
+  participants: [],
+  scores: []
+};
 
-// -------------------- ADMIN CONFIG --------------------
-const ADMIN_EMAIL = "mfaizulkhoir154@gmail.com"; // only this email can access admin UI
-const STORAGE_KEY = "quiz_local_v2_materi";
+// ----------------------- Helpers -----------------------
+const qs = (q) => document.querySelector(q);
+const qsa = (q) => document.querySelectorAll(q);
 
-// -------------------- HELPERS --------------------
-const qs = (s) => document.querySelector(s);
-const qsa = (s) => Array.from(document.querySelectorAll(s));
-const el = (tag, attrs = {}, ...kids) => {
+const makeId = (p = "") => p + Math.random().toString(36).substring(2, 9);
+
+function el(tag, attrs = {}, ...children) {
   const e = document.createElement(tag);
-  for (const k in attrs) {
-    if (k === "class") e.className = attrs[k];
-    else if (k === "html") e.innerHTML = attrs[k];
-    else e.setAttribute(k, attrs[k]);
-  }
-  kids.flat().filter(Boolean).forEach(k => e.append(typeof k === "string" ? document.createTextNode(k) : k));
+  for (let a in attrs) e.setAttribute(a, attrs[a]);
+  children.forEach((c) => {
+    if (typeof c === "string") e.appendChild(document.createTextNode(c));
+    else if (c) e.appendChild(c);
+  });
   return e;
-};
-const escape = str => String(str ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-const makeId = (p='') => p + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-function toast(msg, type='info'){ console.log(`[toast:${type}]`, msg); /* you can replace with nicer UI */ }
-
-// -------------------- LOCAL STORAGE FALLBACK --------------------
-function readLocal() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { courses: [] };
-    return JSON.parse(raw);
-  } catch (e) { return { courses: [] }; }
-}
-function writeLocal(data) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e){ console.warn(e); }
 }
 
-// -------------------- UI SELECTORS (fallbacks) --------------------
-const SELECTORS = {
-  loginForm: qs('#loginForm') || qs('#adminLoginForm') || null,
-  loginEmail: qs('#loginEmail') || qs('#adminEmail') || null,
-  loginPass: qs('#loginPass') || qs('#adminPass') || null,
-  logoutBtn: qs('#btnLogout') || qs('#adminLogoutBtn') || null,
-  adminRoot: qs('#adminContainer') || qs('#admin-app') || qs('.admin-app') || document.body,
-  loginContainer: qs('#loginContainer') || qs('#adminLoginBox') || null,
-  courseListContainers: [ qs('#courseList'), qs('#adminQuestionsList'), qs('#allCourses'), qs('#dashCourses') ].filter(Boolean),
-  btnNewCourse: qs('#btnNewCourse') || qs('#newCourseBtn') || null,
-  mainTitle: qs('#mainTitle') || null
-};
-
-// -------------------- UI: show/hide login & admin --------------------
-function showOnlyLogin() {
-  try {
-    if (SELECTORS.loginContainer) SELECTORS.loginContainer.style.display = 'block';
-    // hide admin elements that might be present
-    if (SELECTORS.courseListContainers.length) SELECTORS.courseListContainers.forEach(c=> c.style.display='none');
-    if (SELECTORS.adminRoot && SELECTORS.loginContainer) {
-      // keep adminRoot visible only after login — we won't wipe whole body
-      // if adminRoot equals body, do nothing
-      if (SELECTORS.adminRoot !== document.body && SELECTORS.adminRoot !== document.documentElement) {
-        SELECTORS.adminRoot.style.display = 'none';
-      }
-    }
-  } catch(e){}
-}
-function showOnlyAdmin() {
-  try {
-    if (SELECTORS.loginContainer) SELECTORS.loginContainer.style.display = 'none';
-    if (SELECTORS.adminRoot && SELECTORS.adminRoot !== document.body && SELECTORS.adminRoot !== document.documentElement) {
-      SELECTORS.adminRoot.style.display = 'block';
-    }
-    if (SELECTORS.courseListContainers.length) SELECTORS.courseListContainers.forEach(c=> c.style.display='block');
-  } catch(e){}
+function escapeHTML(str) {
+  return (str || "")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-// -------------------- AUTH FLOW --------------------
-async function attemptLogin(email, pass) {
-  if (!email || !pass) { toast('Email & password wajib'); return; }
+function toast(msg, type = "info") {
+  const t = el("div", { class: "toast " + type }, msg);
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+// ----------------------- Firebase Admin Check -----------------------
+async function isAdminUidOrEmail(uid, email) {
   try {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    // verify email
-    if ((cred.user?.email || '').toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-      await signOut(auth);
-      toast('Bukan akun admin', 'error');
-      return;
-    }
-    toast('Login berhasil', 'success');
-    // show admin and refresh
-    showOnlyAdmin();
-    await refreshAndRender();
+    const snap = await firebase.getDoc(
+      firebase.doc(db, "admins", uid)
+    );
+    if (snap.exists()) return true;
+
+    const q = firebase.query(
+      firebase.collection(db, "admins"),
+      firebase.where("email", "==", email)
+    );
+    const qsnap = await firebase.getDocs(q);
+    return !qsnap.empty;
   } catch (err) {
-    console.error('login err', err);
-    toast('Gagal login — periksa kredensial', 'error');
+    console.error("Admin check error:", err);
+    return false;
   }
 }
-if (SELECTORS.loginForm && SELECTORS.loginEmail && SELECTORS.loginPass) {
-  SELECTORS.loginForm.addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    const e = SELECTORS.loginEmail.value.trim();
-    const p = SELECTORS.loginPass.value;
-    attemptLogin(e, p);
-  });
-}
 
-// logout wiring
-if (SELECTORS.logoutBtn) {
-  SELECTORS.logoutBtn.addEventListener('click', async () => {
-    try { await signOut(auth); showOnlyLogin(); } catch(e){ console.warn(e); }
-  });
-}
-
-// onAuthStateChanged: only allow ADMIN_EMAIL
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    // not logged in
-    showOnlyLogin();
-    return;
-  }
-  const e = (user.email || '').toLowerCase();
-  if (e !== ADMIN_EMAIL.toLowerCase()) {
-    // not allowed
-    try { await signOut(auth); } catch(e){ console.warn(e); }
-    showOnlyLogin();
-    return;
-  }
-  // allowed admin
-  showOnlyAdmin();
-  await refreshAndRender();
-});
-
-// -------------------- FIRESTORE HELPERS --------------------
+// ----------------------- Courses Remote Ops -----------------------
 async function fetchCoursesRemote() {
   try {
-    const snap = await getDocs(collection(db, 'courses'));
-    const arr = [];
-    snap.forEach(d => {
-      const data = d.data() || {};
-      // normalize materi
-      if (!Array.isArray(data.materi)) {
-        if (Array.isArray(data.questions)) {
-          data.materi = [{ id: makeId('m-'), title: 'Materi', description: data.description||'', questions: data.questions }];
-          delete data.questions;
-        } else data.materi = [];
-      } else {
-        data.materi = data.materi.map(m => ({ id: m.id || makeId('m-'), title: m.title||'Untitled', description: m.description||'', questions: Array.isArray(m.questions)?m.questions:[] }));
-      }
-      arr.push({ id: d.id, ...data });
-    });
-    return arr;
+    const q = firebase.query(
+      firebase.collection(db, "courses"),
+      firebase.orderBy("createdAt", "desc")
+    );
+    const snap = await firebase.getDocs(q);
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
   } catch (err) {
-    console.warn('fetchCoursesRemote failed', err);
+    console.error("Error fetch courses:", err);
     return null;
   }
 }
+
 async function saveCourseRemote(course) {
   try {
-    const payload = { name: course.name || '', description: course.description || '', materi: course.materi || [], updatedAt: Timestamp.now() };
-    if (!course.id || String(course.id).startsWith('local-')) {
-      payload.createdAt = Timestamp.now();
-      const ref = await addDoc(collection(db, 'courses'), payload);
-      return { success:true, id: ref.id };
-    } else {
-      await updateDoc(doc(db, 'courses', course.id), payload);
-      return { success:true, id: course.id };
+    if (course.id) {
+      const ref = firebase.doc(db, "courses", course.id);
+      await firebase.updateDoc(ref, {
+        name: course.name,
+        description: course.description,
+        materi: course.materi,
+        updatedAt: new Date().toISOString()
+      });
+      return { success: true };
     }
+
+    const col = firebase.collection(db, "courses");
+    const docRef = await firebase.addDoc(col, {
+      name: course.name,
+      description: course.description,
+      materi: course.materi,
+      createdAt: new Date().toISOString()
+    });
+
+    course.id = docRef.id;
+    return { success: true };
   } catch (err) {
-    console.warn('saveCourseRemote failed', err);
-    return { success:false };
+    console.error("Save course error:", err);
+    return { success: false, error: err };
   }
 }
+
 async function deleteCourseRemote(id) {
   try {
-    await deleteDoc(doc(db, 'courses', id));
-    return { success:true };
+    const ref = firebase.doc(db, "courses", id);
+    await firebase.deleteDoc(ref);
+    return { success: true };
   } catch (err) {
-    console.warn('deleteCourseRemote failed', err);
-    return { success:false };
+    console.error("Delete course error:", err);
+    return { success: false };
   }
 }
 
-// -------------------- STATE --------------------
-let APP = { courses: [] };
-
-// -------------------- RENDER COURSES (ADMIN) --------------------
-function chooseCourseListContainer() {
-  if (SELECTORS.courseListContainers.length) return SELECTORS.courseListContainers[0];
-  // fallback create a simple container
-  let c = qs('#courseListFallback');
-  if (!c) {
-    c = el('div', { id: 'courseListFallback' });
-    if (SELECTORS.adminRoot && SELECTORS.adminRoot.appendChild) SELECTORS.adminRoot.appendChild(c);
+// ----------------------- LOCAL BACKUP -----------------------
+function readLocalData() {
+  try {
+    const s = localStorage.getItem("adminLocal");
+    return s ? JSON.parse(s) : { courses: [] };
+  } catch {
+    return { courses: [] };
   }
-  return c;
 }
 
-async function refreshAndRender() {
-  // fetch remote
-  const remote = await fetchCoursesRemote();
-  if (remote && Array.isArray(remote)) {
-    APP.courses = remote;
-  } else {
-    const local = readLocal();
-    APP.courses = local.courses || [];
+function writeLocalData(data) {
+  localStorage.setItem("adminLocal", JSON.stringify(data));
+}
+
+// ----------------------- UI Shell -----------------------
+function buildShell() {
+  const root = qs("#adminRoot");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div class="admin-shell">
+      <div class="side">
+        <div class="side-title">Admin Panel</div>
+        <button class="side-btn" data-view="dashboard">Dashboard</button>
+        <button class="side-btn" data-view="courses">Courses</button>
+        <button class="side-btn" data-view="peserta">Peserta</button>
+        <button class="side-btn" data-view="skor">Skor</button>
+
+        <div id="logoutWrap" style="margin-top:auto;display:none">
+          <div class="muted" id="signedEmail"></div>
+          <button class="side-btn danger" id="logoutBtn">Logout</button>
+        </div>
+
+        <div id="loginWrap" style="margin-top:auto;">
+          <input id="logEmail" placeholder="email" />
+          <input id="logPass" placeholder="password" type="password" />
+          <button class="side-btn" id="loginBtn">Login</button>
+        </div>
+      </div>
+
+      <div class="main">
+        <div id="contentInner" class="inner"></div>
+      </div>
+    </div>
+  `;
+
+  qsa(".side-btn[data-view]").forEach((btn) => {
+    btn.onclick = () => navigateToView(btn.dataset.view);
+  });
+
+  qs("#loginBtn").onclick = loginHandler;
+  qs("#logoutBtn").onclick = logoutHandler;
+}
+
+async function loginHandler() {
+  const email = qs("#logEmail").value;
+  const pass = qs("#logPass").value;
+
+  try {
+    await firebase.signInWithEmailAndPassword(auth, email, pass);
+    toast("Login berhasil", "success");
+  } catch (err) {
+    console.error(err);
+    toast("Login gagal", "error");
   }
-  renderDashboard();
-  renderCoursesList();
 }
 
-function renderDashboard() {
-  // try to update mainTitle if present
-  if (SELECTORS.mainTitle) SELECTORS.mainTitle.textContent = 'Dashboard';
-  // optional: show stats into dashCourses container if exists
-  const dash = qs('#dashCourses') || qs('#adminDashboard') || null;
-  if (!dash) return;
-  dash.innerHTML = '';
-  dash.appendChild(el('div', { class: 'wa-card' }, el('div', { html: `<strong>${APP.courses.length}</strong> Courses` })));
+async function logoutHandler() {
+  await firebase.signOut(auth);
+  toast("Logged out");
 }
 
-function renderCoursesList() {
-  const cont = chooseCourseListContainer();
-  cont.innerHTML = '';
-  if (!APP.courses || APP.courses.length === 0) {
-    cont.appendChild(el('div', { class: 'muted' }, 'Belum ada course.'));
+// ----------------------- View Navigation -----------------------
+function navigateToView(name) {
+  const container = qs("#contentInner");
+  if (!container) return;
+
+  if (!APP.user) {
+    container.innerHTML = '<div class="muted">Silakan login</div>';
     return;
   }
-  APP.courses.forEach(c => cont.appendChild(courseRowElement(c)));
-}
 
-function courseRowElement(c) {
-  const mCount = Array.isArray(c.materi) ? c.materi.length : 0;
-  const qCount = Array.isArray(c.materi) ? c.materi.reduce((s,m)=> s + ((Array.isArray(m.questions)?m.questions.length:0)), 0) : 0;
-  const box = el('div', { class: 'course-item', style: 'display:flex;justify-content:space-between;align-items:center;padding:10px;margin-bottom:8px' });
-  box.innerHTML = `<div style="display:flex;gap:12px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:rgba(0,0,0,0.06);display:grid;place-items:center">${escape((c.name||'C')[0])}</div><div><div style="font-weight:700">${escape(c.name)}</div><div class="muted">${mCount} materi • ${qCount} soal</div></div></div>`;
-  const actions = el('div', {});
-  const viewBtn = el('button', { class: 'btn ghost sm' }, 'View');
-  const editBtn = el('button', { class: 'btn sm' }, 'Edit');
-  const delBtn = el('button', { class: 'btn danger sm' }, 'Hapus');
-  viewBtn.addEventListener('click', () => openCourseViewer(c));
-  editBtn.addEventListener('click', () => openCourseEditor(c));
-  delBtn.addEventListener('click', async () => {
-    if (!confirm(`Hapus course "${c.name}"?`)) return;
-    // remote or local
-    if (String(c.id).startsWith('local-')) {
-      const local = readLocal();
-      local.courses = (local.courses||[]).filter(x=> x.id !== c.id);
-      writeLocal(local);
-      toast('Course lokal dihapus');
-      await refreshAndRender();
-      return;
-    }
-    const res = await deleteCourseRemote(c.id);
-    if (res.success) { toast('Course dihapus'); await refreshAndRender(); }
-    else { toast('Gagal hapus remote, mencoba hapus lokal'); const local = readLocal(); local.courses = (local.courses||[]).filter(x=> x.id !== c.id); writeLocal(local); await refreshAndRender(); }
-  });
-  actions.appendChild(viewBtn);
-  actions.appendChild(editBtn);
-  actions.appendChild(delBtn);
-  box.appendChild(actions);
-  return box;
-}
-
-// -------------------- COURSE VIEWER (modal) --------------------
-let modalRoot = null;
-function openModal(x) {
-  if (!modalRoot) { modalRoot = el('div', { id: 'wa_admin_modal' }); document.body.appendChild(modalRoot); }
-  modalRoot.innerHTML = '';
-  const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:grid;place-items:center;z-index:9999;padding:12px' });
-  const card = el('div', { class: 'wa-card', style: 'width:100%;max-width:900px;max-height:90vh;overflow:auto;padding:16px;border-radius:10px' });
-  card.appendChild(x);
-  overlay.appendChild(card);
-  modalRoot.appendChild(overlay);
-  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) modalRoot.innerHTML = ''; });
-  return { overlay, card };
-}
-function closeModal() { if (modalRoot) modalRoot.innerHTML = ''; }
-
-function openCourseViewer(course) {
-  const wrap = el('div');
-  wrap.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, el('h3', {}, course.name || 'Untitled'), el('div', {}, el('button', { class: 'btn ghost sm', onclick: 'void(0)' }, 'Tutup')) ));
-  wrap.appendChild(el('div', { style: 'padding:8px 0', html: `<div class="muted">${escape(course.description||'')}</div>` }));
-  const list = el('div', {});
-  (Array.isArray(course.materi)?course.materi:[]).forEach((m,i) => {
-    const row = el('div',{ class: 'materi-row', style:'display:flex;justify-content:space-between;align-items:center;padding:8px;margin-bottom:8px;background:var(--card)' });
-    row.innerHTML = `<div><div style="font-weight:700">${escape(m.title)}</div><div class="muted">${(Array.isArray(m.questions)?m.questions.length:0)} soal</div></div>`;
-    const btn = el('button', { class: 'btn ghost sm' }, 'Lihat Soal');
-    btn.addEventListener('click', () => {
-      const qwrap = el('div');
-      qwrap.appendChild(el('h4', {}, m.title));
-      (m.questions||[]).forEach((q,ii) => qwrap.appendChild(el('div', { style:'padding:6px 0' , html: `<b>${ii+1}.</b> ${escape(q.question)} <div class="muted">Kunci: ${escape(q.correct||'')}</div>` })));
-      const mm = openModal(qwrap);
-    });
-    row.appendChild(btn);
-    list.appendChild(row);
-  });
-  wrap.appendChild(list);
-  const m = openModal(wrap);
-  // close button wiring (first button with text 'Tutup')
-  m.card.querySelectorAll('button').forEach(b => { if(b.textContent.trim().toLowerCase()==='tutup') b.onclick = () => closeModal(); });
-}
-
-// -------------------- COURSE EDITOR (modal) --------------------
-function openCourseEditor(course = null) {
-  const isEdit = !!course;
-  let temp = isEdit ? JSON.parse(JSON.stringify(course)) : { id: makeId('local-'), name: '', description: '', materi: [] };
-  if (!Array.isArray(temp.materi)) temp.materi = [];
-
-  const wrap = el('div');
-  wrap.appendChild(el('h3', {}, isEdit ? 'Edit Course' : 'Course Baru'));
-  wrap.appendChild(el('label', { class: 'muted' }, 'Nama Mata Kuliah'));
-  const nameIn = el('input', { value: temp.name || '' });
-  wrap.appendChild(nameIn);
-  wrap.appendChild(el('label', { class: 'muted' }, 'Deskripsi (opsional)'));
-  const descIn = el('input', { value: temp.description || '' });
-  wrap.appendChild(descIn);
-  wrap.appendChild(el('hr', {}));
-  const materiCount = el('div', {}, `Materi: ${ (temp.materi||[]).length }`);
-  wrap.appendChild(materiCount);
-
-  const listWrap = el('div', { style:'max-height:320px;overflow:auto;margin-top:8px' });
-  wrap.appendChild(listWrap);
-
-  const addMatBtn = el('button', { class: 'btn sm' }, '+ Materi Baru');
-  wrap.appendChild(addMatBtn);
-
-  const actions = el('div', { style:'display:flex;justify-content:flex-end;gap:8px;margin-top:12px' });
-  const cancelBtn = el('button', { class: 'btn ghost' }, 'Batal');
-  const saveBtn = el('button', { class: 'btn' }, 'Simpan Course');
-  actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
-  wrap.appendChild(actions);
-
-  function renderMatList() {
-    listWrap.innerHTML = '';
-    (temp.materi||[]).forEach((m, idx) => {
-      const item = el('div', { style:'display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;margin-bottom:6px;background:var(--card)' });
-      item.innerHTML = `<div><div style="font-weight:700">${escape(m.title||'(Tanpa Judul)')}</div><div class="muted">${escape(m.description||'')} • ${(m.questions||[]).length} soal</div></div>`;
-      const btns = el('div', {});
-      const openBtn = el('button', { class: 'btn ghost sm' }, 'Buka');
-      const editBtn = el('button', { class: 'btn sm' }, 'Edit');
-      const delBtn = el('button', { class: 'btn danger sm' }, 'Hapus');
-      openBtn.addEventListener('click', () => openMateriEditor(idx));
-      editBtn.addEventListener('click', () => openMateriForm(idx));
-      delBtn.addEventListener('click', () => {
-        if (!confirm('Hapus materi ini?')) return;
-        temp.materi.splice(idx,1);
-        renderMatList();
-        materiCount.textContent = `Materi: ${ (temp.materi||[]).length }`;
-      });
-      btns.appendChild(openBtn); btns.appendChild(editBtn); btns.appendChild(delBtn);
-      item.appendChild(btns);
-      listWrap.appendChild(item);
-    });
+  switch (name) {
+    case "dashboard":
+      renderDashboard(container);
+      break;
+    case "courses":
+      renderCourses(container);
+      break;
+    case "peserta":
+      renderPeserta(container);
+      break;
+    case "skor":
+      renderSkor(container);
+      break;
+    default:
+      container.innerHTML = "";
   }
-
-  function openMateriForm(index=null) {
-    const isEditMat = index !== null;
-    const mat = isEditMat ? JSON.parse(JSON.stringify(temp.materi[index])) : { id: makeId('m-'), title:'', description:'', questions: [] };
-    const f = el('div', {});
-    f.appendChild(el('h4', {}, isEditMat ? 'Edit Materi' : 'Tambah Materi'));
-    f.appendChild(el('label', { class: 'muted' }, 'Judul Materi'));
-    const titleIn = el('input', { value: mat.title || '' });
-    f.appendChild(titleIn);
-    f.appendChild(el('label', { class: 'muted' }, 'Deskripsi (opsional)'));
-    const descInp = el('input', { value: mat.description || '' });
-    f.appendChild(descInp);
-    const btnWrap = el('div', { style:'display:flex;justify-content:flex-end;gap:8px;margin-top:8px' });
-    const cancel = el('button', { class: 'btn ghost sm' }, 'Batal');
-    const save = el('button', { class: 'btn sm' }, isEditMat ? 'Update' : 'Simpan');
-    btnWrap.appendChild(cancel); btnWrap.appendChild(save);
-    f.appendChild(btnWrap);
-    const mmodal = openModal(f);
-    cancel.onclick = () => closeModal();
-    save.onclick = () => {
-      const title = titleIn.value.trim();
-      if (!title) return alert('Judul materi wajib.');
-      mat.title = title; mat.description = descInp.value.trim();
-      if (isEditMat) temp.materi[index] = mat; else temp.materi.push(mat);
-      closeModal();
-      renderMatList();
-      materiCount.textContent = `Materi: ${ (temp.materi||[]).length }`;
-    };
-  }
-
-  function openMateriEditor(index) {
-    const mat = temp.materi[index];
-    if (!mat) return alert('Materi tidak ditemukan');
-    const wrapM = el('div', {});
-    wrapM.appendChild(el('h3', {}, mat.title || 'Materi'));
-    wrapM.appendChild(el('div', { class: 'muted', html: escape(mat.description||'') }));
-    const qList = el('div', { style:'max-height:380px;overflow:auto;margin-top:8px' });
-    (mat.questions||[]).forEach((q,qi) => {
-      const row = el('div', { style:'padding:8px;margin-bottom:6px;border-radius:8px;background:var(--card);display:flex;justify-content:space-between;align-items:center' });
-      row.innerHTML = `<div><div style="font-weight:600">${escape(q.question||'')}</div><div class="muted">Key: ${escape(q.correct||'')}</div></div>`;
-      const actions = el('div', {});
-      const editQ = el('button', { class: 'btn ghost sm' }, 'Edit');
-      const delQ = el('button', { class: 'btn danger sm' }, 'Hapus');
-      editQ.addEventListener('click', () => openQuestionForm(index, qi));
-      delQ.addEventListener('click', () => { if(!confirm('Hapus soal ini?')) return; mat.questions.splice(qi,1); openMateriEditor(index); renderMatList(); });
-      actions.appendChild(editQ); actions.appendChild(delQ);
-      row.appendChild(actions);
-      qList.appendChild(row);
-    });
-    const addQ = el('button', { class: 'btn sm', style:'margin-top:8px' }, '+ Tambah Soal');
-    addQ.addEventListener('click', () => openQuestionForm(index, null));
-    wrapM.appendChild(qList); wrapM.appendChild(addQ);
-    const mmodal = openModal(wrapM);
-  }
-
-  function openQuestionForm(mIndex, qIndex = null) {
-    const mat = temp.materi[mIndex];
-    if (!mat) return alert('Materi not found');
-    const isEditQ = qIndex !== null && mat.questions && mat.questions[qIndex];
-    const qData = isEditQ ? JSON.parse(JSON.stringify(mat.questions[qIndex])) : { id: makeId('q-'), question:'', options:{A:'',B:'',C:'',D:''}, correct:'A', explanation:'' };
-    const f = el('div', {});
-    f.appendChild(el('h4', {}, isEditQ ? 'Edit Soal' : 'Tambah Soal'));
-    f.appendChild(el('label', { class: 'muted' }, 'Pertanyaan'));
-    const qText = el('textarea', { rows:3 }, qData.question || '');
-    f.appendChild(qText);
-    const grid = el('div', { style:'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px' });
-    const ia = el('input', { placeholder:'Opsi A', value: qData.options?.A || '' });
-    const ib = el('input', { placeholder:'Opsi B', value: qData.options?.B || '' });
-    const ic = el('input', { placeholder:'Opsi C', value: qData.options?.C || '' });
-    const idd = el('input', { placeholder:'Opsi D', value: qData.options?.D || '' });
-    grid.appendChild(ia); grid.appendChild(ib); grid.appendChild(ic); grid.appendChild(idd);
-    f.appendChild(grid);
-    f.appendChild(el('label', { class: 'muted', style:'margin-top:8px' }, 'Jawaban Benar'));
-    const sel = el('select', {});
-    ['A','B','C','D'].forEach(o => sel.appendChild(el('option', { value:o }, o)));
-    sel.value = qData.correct || 'A';
-    f.appendChild(sel);
-    f.appendChild(el('label', { class: 'muted' }, 'Penjelasan (opsional)'));
-    const expl = el('input', { value: qData.explanation || '' });
-    f.appendChild(expl);
-    const actionsQ = el('div', { style:'display:flex;justify-content:flex-end;gap:8px;margin-top:8px' });
-    const cancelQ = el('button', { class: 'btn ghost sm' }, 'Batal');
-    const saveQ = el('button', { class: 'btn sm' }, isEditQ ? 'Update Soal' : 'Tambahkan Soal');
-    actionsQ.appendChild(cancelQ); actionsQ.appendChild(saveQ);
-    f.appendChild(actionsQ);
-    const mm = openModal(f);
-    cancelQ.onclick = () => closeModal();
-    saveQ.onclick = () => {
-      const txt = qText.value.trim();
-      if (!txt) return alert('Pertanyaan wajib diisi');
-      const newQ = {
-        id: qData.id,
-        question: txt,
-        options: { A: ia.value.trim(), B: ib.value.trim(), C: ic.value.trim(), D: idd.value.trim() },
-        correct: sel.value,
-        explanation: expl.value.trim()
-      };
-      if (!newQ.options.A || !newQ.options.B) return alert('Minimal opsi A & B harus diisi');
-      mat.questions = mat.questions || [];
-      if (isEditQ) mat.questions[qIndex] = newQ; else mat.questions.push(newQ);
-      closeModal();
-      renderMatList();
-    };
-  }
-
-  addMatBtn.addEventListener('click', () => openMateriForm(null));
-  cancelBtn.addEventListener('click', () => closeModal());
-  saveBtn.addEventListener('click', async () => {
-    const name = nameIn.value.trim();
-    if (!name) return alert('Nama course wajib diisi');
-    saveBtn.disabled = true; saveBtn.textContent = 'Menyimpan...';
-    const payload = { id: temp.id, name, description: descIn.value.trim(), materi: temp.materi || [] };
-    // try save remote
-    const res = await saveCourseRemote(payload);
-    if (!res.success) {
-      // fallback local
-      const local = readLocal();
-      if (!payload.id || String(payload.id).startsWith('local-')) payload.id = makeId('local-');
-      const idx = (local.courses||[]).findIndex(x=> x.id === payload.id);
-      if (idx >= 0) local.courses[idx] = payload; else local.courses.push(payload);
-      writeLocal(local);
-      toast('Disimpan ke local (remote error)', 'error');
-    } else {
-      toast('Berhasil disimpan', 'success');
-    }
-    closeModal();
-    await refreshAndRender();
-  });
-
-  renderMatList();
-  openModal(wrap);
 }
 
-// -------------------- UTIL: sort by name --------------------
-function sortCourses(list) {
-  return (list||[]).sort((a,b) => (a.name||'').localeCompare(b.name||''));
-}
+// ----------------------- Dashboard -----------------------
+function renderDashboard(container) {
+  container.innerHTML = "";
 
-// -------------------- REFRESH & BOOT --------------------
-async function refreshAndRender() {
-  // fetch remote else local
-  const remote = await fetchCoursesRemote();
-  if (remote && Array.isArray(remote)) APP.courses = sortCourses(remote);
-  else {
-    const local = readLocal();
-    APP.courses = sortCourses(local.courses || []);
-  }
-  renderDashboard();
-  renderCoursesList();
-}
+  const totalCourses = APP.courses.length;
+  const totalMateri = APP.courses.reduce(
+    (t, c) => t + (c.materi?.length || 0),
+    0
+  );
+  const totalSoal = APP.courses.reduce(
+    (t, c) =>
+      t +
+      c.materi.reduce((s, m) => s + (m.questions?.length || 0), 0),
+    0
+  );
 
-// -------------------- THEME TOGGLE (simple) --------------------
-function wireThemeToggle() {
-  const t = qs('#themeToggle') || qs('#themeToggleAdmin') || null;
-  if (!t) return;
-  try {
-    const saved = localStorage.getItem('theme') || 'light';
-    document.body.classList.toggle('dark', saved === 'dark');
-    if (t.tagName && t.tagName.toLowerCase()==='input') t.checked = saved === 'dark';
-    if (t.tagName && t.tagName.toLowerCase()==='button') t.textContent = saved === 'dark' ? '☀' : '☾';
-  } catch(e){}
-  t.addEventListener('click', () => {
-    const isDark = document.body.classList.toggle('dark');
-    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
-    if (t.tagName && t.tagName.toLowerCase()==='button') t.textContent = isDark ? '☀' : '☾';
+  container.innerHTML = `
+    <div class="wa-card">
+      <h3>Dashboard</h3>
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-num">${totalCourses}</div>
+          <div class="stat-label">Course</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">${totalMateri}</div>
+          <div class="stat-label">Materi</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">${totalSoal}</div>
+          <div class="stat-label">Soal</div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:26px">Course Terbaru</h4>
+      <div id="lastCourses" style="margin-top:10px"></div>
+    </div>
+  `;
+
+  const last = qs("#lastCourses");
+  APP.courses.slice(0, 5).forEach((c) => {
+    last.appendChild(createCourseRow(c));
   });
 }
 
-// -------------------- INITIALIZE UI --------------------
-document.addEventListener('DOMContentLoaded', () => {
-  // always start with login visible
-  showOnlyLogin();
-  wireThemeToggle();
-
-  // wire "New Course" buttons if any present on page
-  const newBtn = SELECTORS.btnNewCourse || qs('#newCourse') || null;
-  if (newBtn) newBtn.addEventListener('click', () => openCourseEditor(null));
-
-  // if login form not present, but user may manually be signed in (onAuthStateChanged handles)
-  // try refresh if already logged-in and admin
-  // onAuthStateChanged will call refreshAndRender for authorized admin
-});
-
-    // selesai dashboard
-}
-
+// ----------------------- Course Rows -----------------------
 function createCourseRow(course) {
-  return el('div', { class:'course-item' },
-    el('div', {}, 
-      el('div', { style:'font-weight:600' }, escapeHTML(course.name)),
-      el('div', { class:'muted', style:'font-size:12px' },
-        (course.materi?.length || 0) + ' materi • ' +
-        course.materi?.reduce((t,m)=>t+(m.questions?.length||0),0) + ' soal'
+  return el(
+    "div",
+    { class: "course-item" },
+    el(
+      "div",
+      {},
+      el("div", { style: "font-weight:600" }, escapeHTML(course.name)),
+      el(
+        "div",
+        { class: "muted", style: "font-size:12px" },
+        (course.materi?.length || 0) +
+          " materi • " +
+          course.materi?.reduce(
+            (t, m) => t + (m.questions?.length || 0),
+            0
+          ) +
+          " soal"
       )
     ),
-    el('div', {},
-      el('button', { class:'btn sm', onclick:()=>openCourseEditor(course) }, 'Edit')
+    el(
+      "div",
+      {},
+      el(
+        "button",
+        { class: "btn sm", onclick: () => openCourseEditor(course) },
+        "Edit"
+      )
     )
   );
 }
@@ -590,12 +312,14 @@ function renderCourses(container) {
   container.innerHTML = `
     <div class="wa-card">
       <h3>Daftar Course</h3>
-      <p class="muted">Klik tombol "Tambah Course" untuk membuat baru</p>
+      <p class="muted">Klik "Tambah Course" untuk membuat yang baru</p>
+      <button class="btn" onclick="openCourseEditor(null)">Tambah Course</button>
       <div id="courseList" style="margin-top:18px"></div>
     </div>
   `;
-  const list = qs('#courseList');
-  APP.courses.forEach(c => list.appendChild(createCourseRow(c)));
+
+  const list = qs("#courseList");
+  APP.courses.forEach((c) => list.appendChild(createCourseRow(c)));
 }
 
 // ----------------------- Peserta View -----------------------
@@ -603,16 +327,24 @@ function renderPeserta(container) {
   container.innerHTML = `
     <div class="wa-card">
       <h3>Peserta</h3>
-      ${APP.participants.length === 0 ? '<p class="muted">Belum ada peserta</p>' : ''}
+      ${
+        APP.participants.length === 0
+          ? '<p class="muted">Belum ada peserta</p>'
+          : ""
+      }
       <div style="margin-top:12px">
-        ${APP.participants.map(p => `
+        ${APP.participants
+          .map(
+            (p) => `
           <div class="q-row">
             <div>
               <b>${escapeHTML(p.name)}</b><br>
-              <span class="muted">${escapeHTML(p.email || '-') }</span>
+              <span class="muted">${escapeHTML(p.email || "-")}</span>
             </div>
           </div>
-        `).join('')}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;
@@ -623,42 +355,67 @@ function renderSkor(container) {
   container.innerHTML = `
     <div class="wa-card">
       <h3>Skor Peserta</h3>
-      ${APP.scores.length === 0 ? '<p class="muted">Belum ada skor</p>' : ''}
+      ${
+        APP.scores.length === 0
+          ? '<p class="muted">Belum ada skor</p>'
+          : ""
+      }
       <div style="margin-top:12px">
-        ${APP.scores.map(s => `
+        ${APP.scores
+          .map(
+            (s) => `
           <div class="q-row">
             <div>
               <b>${escapeHTML(s.name)}</b><br>
-              <span class="muted">Course: ${escapeHTML(s.courseName)}</span><br>
+              <span class="muted">Course: ${escapeHTML(
+                s.courseName
+              )}</span><br>
               <span class="muted">Skor: ${s.score}</span>
             </div>
           </div>
-        `).join('')}
+        `
+          )
+          .join("")}
       </div>
     </div>
   `;
 }
 
 // ----------------------- Course Editor -----------------------
-function openCourseEditor(course=null) {
+function openCourseEditor(course = null) {
   const isEdit = !!course;
-  const data = course || { id:null, name:'', description:'', materi:[] };
+  const data =
+    course || { id: null, name: "", description: "", materi: [] };
 
-  const container = qs('#contentInner');
-  container.innerHTML = '';
+  const container = qs("#contentInner");
+  container.innerHTML = "";
 
-  const wrap = el('div', { class:'wa-card' },
-    el('h3', {}, isEdit ? 'Edit Course' : 'Buat Course'),
-    el('label', {}, 'Nama course'),
-    el('input', { id:'courseName', value:data.name }),
-    el('label', {}, 'Deskripsi'),
-    el('textarea', { id:'courseDesc' }, data.description || ''),
-    el('div', { style:'margin-top:12px;font-weight:600' }, 'Materi'),
-    el('div', { id:'materiList', style:'margin-top:8px' }),
-    el('button', { class:'btn ghost', onclick:()=>addMateriRow(data) }, 'Tambah Materi'),
-    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
-      el('button', { class:'btn', onclick:()=>saveCourseEditor(data) }, 'Simpan'),
-      isEdit ? el('button', { class:'btn danger', onclick:()=>deleteCourseConfirm(data) }, 'Hapus') : ''
+  const wrap = el(
+    "div",
+    { class: "wa-card" },
+    el("h3", {}, isEdit ? "Edit Course" : "Buat Course"),
+    el("label", {}, "Nama course"),
+    el("input", { id: "courseName", value: data.name }),
+    el("label", {}, "Deskripsi"),
+    el("textarea", { id: "courseDesc" }, data.description || ""),
+    el("div", { style: "margin-top:12px;font-weight:600" }, "Materi"),
+    el("div", { id: "materiList", style: "margin-top:8px" }),
+    el(
+      "button",
+      { class: "btn ghost", onclick: () => addMateriRow(data) },
+      "Tambah Materi"
+    ),
+    el(
+      "div",
+      { style: "margin-top:20px;display:flex;gap:14px" },
+      el("button", { class: "btn", onclick: () => saveCourseEditor(data) }, "Simpan"),
+      isEdit
+        ? el(
+            "button",
+            { class: "btn danger", onclick: () => deleteCourseConfirm(data) },
+            "Hapus"
+          )
+        : ""
     )
   );
 
@@ -667,39 +424,61 @@ function openCourseEditor(course=null) {
 }
 
 function renderMateriList(course) {
-  const list = qs('#materiList');
-  list.innerHTML = '';
+  const list = qs("#materiList");
+  list.innerHTML = "";
 
-  (course.materi || []).forEach(m => list.appendChild(createMateriRow(course, m)));
+  (course.materi || []).forEach((m) =>
+    list.appendChild(createMateriRow(course, m))
+  );
 }
 
 function createMateriRow(course, materi) {
-  return el('div', { class:'materi-row' },
-    el('div', { class:'materi-title' }, escapeHTML(materi.title)),
-    el('div', {},
-      el('button', { class:'btn sm ghost', onclick:()=>editMateri(course, materi) }, 'Edit'),
-      el('button', { class:'btn sm danger', onclick:()=>deleteMateri(course, materi) }, 'Hapus')
+  return el(
+    "div",
+    { class: "materi-row" },
+    el("div", { class: "materi-title" }, escapeHTML(materi.title)),
+    el(
+      "div",
+      {},
+      el(
+        "button",
+        { class: "btn sm ghost", onclick: () => editMateri(course, materi) },
+        "Edit"
+      ),
+      el(
+        "button",
+        { class: "btn sm danger", onclick: () => deleteMateri(course, materi) },
+        "Hapus"
+      )
     )
   );
 }
 
 // ----------------------- Materi Editor -----------------------
 function editMateri(course, materi) {
-  const container = qs('#contentInner');
-  container.innerHTML = '';
+  const container = qs("#contentInner");
+  container.innerHTML = "";
 
-  const wrap = el('div', { class:'wa-card' },
-    el('h3', {}, 'Edit Materi'),
-    el('label', {}, 'Judul'),
-    el('input', { id:'materiTitle', value:materi.title }),
-    el('label', {}, 'Deskripsi'),
-    el('textarea', { id:'materiDesc' }, materi.description || ''),
-    el('div', { style:'margin-top:16px;font-weight:600' }, 'Soal'),
-    el('div', { id:'qList', style:'margin-top:10px' }),
-    el('button', { class:'btn ghost', onclick:()=>addQuestion(course, materi) }, 'Tambah Soal'),
-    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
-      el('button', { class:'btn', onclick:()=>saveMateri(course, materi) }, 'Simpan'),
-      el('button', { class:'btn danger', onclick:()=>openCourseEditor(course) }, 'Kembali')
+  const wrap = el(
+    "div",
+    { class: "wa-card" },
+    el("h3", {}, "Edit Materi"),
+    el("label", {}, "Judul"),
+    el("input", { id: "materiTitle", value: materi.title }),
+    el("label", {}, "Deskripsi"),
+    el("textarea", { id: "materiDesc" }, materi.description || ""),
+    el("div", { style: "margin-top:16px;font-weight:600" }, "Soal"),
+    el("div", { id: "qList", style: "margin-top:10px" }),
+    el(
+      "button",
+      { class: "btn ghost", onclick: () => addQuestion(course, materi) },
+      "Tambah Soal"
+    ),
+    el(
+      "div",
+      { style: "margin-top:20px;display:flex;gap:14px" },
+      el("button", { class: "btn", onclick: () => saveMateri(course, materi) }, "Simpan"),
+      el("button", { class: "btn danger", onclick: () => openCourseEditor(course) }, "Kembali")
     )
   );
 
@@ -708,80 +487,104 @@ function editMateri(course, materi) {
 }
 
 function renderQuestions(course, materi) {
-  const list = qs('#qList');
-  list.innerHTML = '';
+  const list = qs("#qList");
+  list.innerHTML = "";
 
-  (materi.questions || []).forEach(q => list.appendChild(createQuestionRow(course, materi, q)));
+  (materi.questions || []).forEach((q) =>
+    list.appendChild(createQuestionRow(course, materi, q))
+  );
 }
 
 function createQuestionRow(course, materi, q) {
-  return el('div', { class:'q-row' },
-    el('div', {},
-      el('div', { style:'font-weight:600' }, escapeHTML(q.question)),
-      el('div', { class:'muted', style:'font-size:12px' }, 'Kunci: ' + escapeHTML(q.correct || '-'))
+  return el(
+    "div",
+    { class: "q-row" },
+    el(
+      "div",
+      {},
+      el("div", { style: "font-weight:600" }, escapeHTML(q.question)),
+      el(
+        "div",
+        { class: "muted", style: "font-size:12px" },
+        "Kunci: " + escapeHTML(q.correct || "-")
+      )
     ),
-    el('div', {},
-      el('button', { class:'btn sm ghost', onclick:()=>editQuestion(course, materi, q) }, 'Edit'),
-      el('button', { class:'btn sm danger', onclick:()=>deleteQuestion(course, materi, q) }, 'Hapus')
+    el(
+      "div",
+      {},
+      el(
+        "button",
+        { class: "btn sm ghost", onclick: () => editQuestion(course, materi, q) },
+        "Edit"
+      ),
+      el(
+        "button",
+        { class: "btn sm danger", onclick: () => deleteQuestion(course, materi, q) },
+        "Hapus"
+      )
     )
   );
 }
 
 function addMateriRow(course) {
   const newM = {
-    id: makeId('m-'),
-    title: 'Materi Baru',
-    description:'',
-    questions:[]
+    id: makeId("m-"),
+    title: "Materi Baru",
+    description: "",
+    questions: []
   };
   course.materi.push(newM);
   renderMateriList(course);
 }
 
 function deleteMateri(course, materi) {
-  course.materi = course.materi.filter(m => m.id !== materi.id);
+  course.materi = course.materi.filter((m) => m.id !== materi.id);
   renderMateriList(course);
 }
 
 function addQuestion(course, materi) {
   materi.questions.push({
-    id: makeId('q-'),
-    question:'Soal baru',
-    options:{A:'',B:'',C:'',D:''},
-    correct:'A',
-    explanation:''
+    id: makeId("q-"),
+    question: "Soal baru",
+    options: { A: "", B: "", C: "", D: "" },
+    correct: "A",
+    explanation: ""
   });
   renderQuestions(course, materi);
 }
 
 function deleteQuestion(course, materi, q) {
-  materi.questions = materi.questions.filter(x => x.id !== q.id);
+  materi.questions = materi.questions.filter((x) => x.id !== q.id);
   renderQuestions(course, materi);
 }
 
 function editQuestion(course, materi, q) {
-  const container = qs('#contentInner');
-  container.innerHTML = '';
+  const container = qs("#contentInner");
+  container.innerHTML = "";
 
-  const wrap = el('div', { class:'wa-card' },
-    el('h3', {}, 'Edit Soal'),
-    el('label', {}, 'Pertanyaan'),
-    el('textarea', { id:'qText' }, q.question),
-    el('label', {}, 'Pilihan A'),
-    el('input', { id:'qA', value:q.options.A }),
-    el('label', {}, 'Pilihan B'),
-    el('input', { id:'qB', value:q.options.B }),
-    el('label', {}, 'Pilihan C'),
-    el('input', { id:'qC', value:q.options.C }),
-    el('label', {}, 'Pilihan D'),
-    el('input', { id:'qD', value:q.options.D }),
-    el('label', {}, 'Jawaban Benar (A/B/C/D)'),
-    el('input', { id:'qCorrect', value:q.correct }),
-    el('label', {}, 'Penjelasan'),
-    el('textarea', { id:'qExplain' }, q.explanation || ''),
-    el('div', { style:'margin-top:20px;display:flex;gap:14px' },
-      el('button', { class:'btn', onclick:()=>saveQuestion(course, materi, q) }, 'Simpan'),
-      el('button', { class:'btn danger', onclick:()=>editMateri(course, materi) }, 'Kembali')
+  const wrap = el(
+    "div",
+    { class: "wa-card" },
+    el("h3", {}, "Edit Soal"),
+    el("label", {}, "Pertanyaan"),
+    el("textarea", { id: "qText" }, q.question),
+    el("label", {}, "Pilihan A"),
+    el("input", { id: "qA", value: q.options.A }),
+    el("label", {}, "Pilihan B"),
+    el("input", { id: "qB", value: q.options.B }),
+    el("label", {}, "Pilihan C"),
+    el("input", { id: "qC", value: q.options.C }),
+    el("label", {}, "Pilihan D"),
+    el("input", { id: "qD", value: q.options.D }),
+    el("label", {}, "Jawaban Benar (A/B/C/D)"),
+    el("input", { id: "qCorrect", value: q.correct }),
+    el("label", {}, "Penjelasan"),
+    el("textarea", { id: "qExplain" }, q.explanation || ""),
+    el(
+      "div",
+      { style: "margin-top:20px;display:flex;gap:14px" },
+      el("button", { class: "btn", onclick: () => saveQuestion(course, materi, q) }, "Simpan"),
+      el("button", { class: "btn danger", onclick: () => editMateri(course, materi) }, "Kembali")
     )
   );
 
@@ -789,45 +592,47 @@ function editQuestion(course, materi, q) {
 }
 
 function saveQuestion(course, materi, q) {
-  q.question = qs('#qText').value;
-  q.options.A = qs('#qA').value;
-  q.options.B = qs('#qB').value;
-  q.options.C = qs('#qC').value;
-  q.options.D = qs('#qD').value;
-  q.correct = qs('#qCorrect').value.trim().toUpperCase();
-  q.explanation = qs('#qExplain').value;
+  q.question = qs("#qText").value;
+  q.options.A = qs("#qA").value;
+  q.options.B = qs("#qB").value;
+  q.options.C = qs("#qC").value;
+  q.options.D = qs("#qD").value;
+  q.correct = qs("#qCorrect").value.trim().toUpperCase();
+  q.explanation = qs("#qExplain").value;
 
   editMateri(course, materi);
 }
 
 function saveMateri(course, materi) {
-  materi.title = qs('#materiTitle').value;
-  materi.description = qs('#materiDesc').value;
+  materi.title = qs("#materiTitle").value;
+  materi.description = qs("#materiDesc").value;
+
   openCourseEditor(course);
 }
 
 // ----------------------- Save Course -----------------------
 async function saveCourseEditor(course) {
-  course.name = qs('#courseName').value;
-  course.description = qs('#courseDesc').value;
+  course.name = qs("#courseName").value;
+  course.description = qs("#courseDesc").value;
 
   const res = await saveCourseRemote(course);
   if (res.success) {
-    toast('Berhasil disimpan','success');
+    toast("Berhasil disimpan", "success");
     refreshAndRender();
   } else {
-    toast('Gagal menyimpan','error');
+    toast("Gagal menyimpan", "error");
   }
 }
 
 async function deleteCourseConfirm(course) {
-  if (!confirm('Yakin ingin menghapus?')) return;
+  if (!confirm("Yakin ingin menghapus?")) return;
+
   const res = await deleteCourseRemote(course.id);
   if (res.success) {
-    toast('Berhasil dihapus','success');
+    toast("Berhasil dihapus", "success");
     refreshAndRender();
   } else {
-    toast('Gagal menghapus','error');
+    toast("Gagal menghapus", "error");
   }
 }
 
@@ -835,39 +640,40 @@ async function deleteCourseConfirm(course) {
 async function refreshAndRender() {
   const remote = await fetchCoursesRemote();
   APP.courses = remote || readLocalData().courses;
-  navigateToView('dashboard');
+  writeLocalData({ courses: APP.courses });
+
+  navigateToView("dashboard");
 }
 
 // ----------------------- Auth State -----------------------
-onAuthStateChanged(auth, async (user) => {
+firebase.onAuthStateChanged(auth, async (user) => {
   APP.user = user;
 
-  const loginWrap = qs('#loginWrap');
-  const logoutWrap = qs('#logoutWrap');
+  const loginWrap = qs("#loginWrap");
+  const logoutWrap = qs("#logoutWrap");
 
   if (!user) {
-    loginWrap.style.display = 'block';
-    logoutWrap.style.display = 'none';
-    qs('#contentInner').innerHTML = '<div class="muted">Silakan login</div>';
+    loginWrap.style.display = "block";
+    logoutWrap.style.display = "none";
+    qs("#contentInner").innerHTML = '<div class="muted">Silakan login</div>';
     return;
   }
 
   const ok = await isAdminUidOrEmail(user.uid, user.email);
   if (!ok) {
-    toast('Akses ditolak','error');
-    auth.signOut();
+    toast("Akses ditolak", "error");
+    firebase.signOut(auth);
     return;
   }
 
-  qs('#signedEmail').textContent = user.email || '';
-  loginWrap.style.display = 'none';
-  logoutWrap.style.display = 'block';
+  qs("#signedEmail").textContent = user.email || "-";
+  loginWrap.style.display = "none";
+  logoutWrap.style.display = "block";
 
   await refreshAndRender();
 });
 
 // ----------------------- Init -----------------------
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   buildShell();
 });
-
