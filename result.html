@@ -5,118 +5,197 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QuizApp - Hasil Quiz</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
-<body>
+<body data-theme="light">
     <div class="app">
+        <!-- Header -->
         <header class="topbar">
-            <h1>🏆 QuizApp</h1>
+            <h1><i class="fas fa-trophy"></i> Hasil Quiz</h1>
             <div class="top-actions">
-                <button id="themeToggle" class="btn circle">☾</button>
-                <a class="btn" href="index.html">Home</a>
-                <a class="btn" href="quiz.html">Quiz Lain</a>
+                <a href="index.html" class="btn secondary">
+                    <i class="fas fa-home"></i> Home
+                </a>
+                <a href="quiz.html" class="btn primary">
+                    <i class="fas fa-redo"></i> Quiz Lain
+                </a>
             </div>
         </header>
 
+        <!-- Main Content -->
         <main class="container">
-            <section class="card">
-                <h2 id="resultTitle">Hasil Quiz</h2>
-                <div id="resultContainer">
-                    <p class="muted">Memuat hasil...</p>
+            <div id="resultContainer" class="card">
+                <!-- Results will be loaded here -->
+                <div style="text-align: center; padding: 40px;">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 16px; color: var(--text-muted);">Memuat hasil...</p>
                 </div>
-                
-                <div class="actions-row" style="margin-top: 20px;">
-                    <a href="quiz.html" class="btn primary">Kerjakan Quiz Lain</a>
-                    <a href="index.html" class="btn">Kembali ke Home</a>
-                </div>
-            </section>
+            </div>
         </main>
 
+        <!-- Footer -->
         <footer class="footer">
             <small>© 2024 QuizApp • Halaman Hasil</small>
         </footer>
+        
+        <!-- Theme Toggle -->
+        <button id="themeToggle" class="theme-switcher">
+            <i class="fas fa-moon"></i>
+        </button>
     </div>
 
     <script>
-        // Display result
+        // Display result from localStorage
         const result = JSON.parse(localStorage.getItem('quizResult'));
         const resultContainer = document.getElementById('resultContainer');
-        const resultTitle = document.getElementById('resultTitle');
+        const themeToggle = document.getElementById('themeToggle');
         
-        if (result) {
-            const percentage = Math.round((result.score / result.totalQuestions) * 100);
-            resultTitle.textContent = `Hasil: ${result.courseName}`;
+        function displayResults() {
+            if (!result) {
+                resultContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3 style="margin-bottom: 8px;">Tidak ada Hasil Quiz</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 20px;">Silakan kerjakan quiz terlebih dahulu</p>
+                        <div style="display: flex; gap: 12px; justify-content: center;">
+                            <a href="index.html" class="btn secondary">
+                                <i class="fas fa-home"></i> Kembali ke Home
+                            </a>
+                            <a href="quiz.html" class="btn primary">
+                                <i class="fas fa-play"></i> Mulai Quiz
+                            </a>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const percentage = result.percentage || Math.round((result.score / result.totalQuestions) * 100);
+            const timeMinutes = Math.floor(result.timeSpent / 60);
+            const timeSeconds = result.timeSpent % 60;
             
             resultContainer.innerHTML = `
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <div style="font-size: 48px; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
-                        ${result.score}/${result.totalQuestions}
+                <div style="text-align: center; margin-bottom: 40px;">
+                    <div style="width: 100px; height: 100px; background: linear-gradient(135deg, #25D366, #128C7E); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+                        <i class="fas fa-trophy" style="color: white; font-size: 48px;"></i>
                     </div>
-                    <div style="font-size: 24px; margin-bottom: 20px;">
-                        ${percentage}%
-                    </div>
+                    <h2>Quiz Selesai!</h2>
+                    <p class="muted">${result.courseName || 'Course'}</p>
                     
-                    <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 30px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 32px; color: var(--success);">${result.score}</div>
-                            <div style="font-size: 14px; color: var(--muted);">Benar</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 32px; color: var(--danger);">${result.totalQuestions - result.score}</div>
-                            <div style="font-size: 14px; color: var(--muted);">Salah</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 32px; color: var(--primary);">${result.totalQuestions}</div>
-                            <div style="font-size: 14px; color: var(--muted);">Total</div>
+                    <div style="background: linear-gradient(135deg, #25D366, #128C7E); color: white; padding: 30px; border-radius: 20px; margin: 30px 0; position: relative;">
+                        <div style="font-size: 64px; font-weight: bold; line-height: 1;">${result.score}/${result.totalQuestions}</div>
+                        <div style="font-size: 24px; opacity: 0.9; margin-top: 8px;">${percentage}%</div>
+                        
+                        <div style="position: absolute; top: 20px; right: 20px; background: rgba(255, 255, 255, 0.2); padding: 8px 16px; border-radius: 20px; font-size: 14px;">
+                            <i class="fas fa-clock"></i> ${timeMinutes.toString().padStart(2, '0')}:${timeSeconds.toString().padStart(2, '0')}
                         </div>
                     </div>
                     
-                    <h3>Review Jawaban:</h3>
-                    <div style="text-align: left; margin-top: 20px;">
-                        ${result.questions.map((q, index) => {
-                            const userAnswer = result.userAnswers[index];
-                            const correctAnswer = q.jawaban || q.correct;
-                            const isCorrect = userAnswer === correctAnswer;
-                            
-                            return `
-                                <div class="result-row ${isCorrect ? 'correct' : 'incorrect'}">
-                                    <div class="question"><b>${index + 1}. ${q.pertanyaan || q.question}</b></div>
-                                    <div class="answer">Jawaban Anda: <b>${userAnswer || 'Tidak dijawab'}</b> ${isCorrect ? '✓' : '✗'}</div>
-                                    <div class="correct-answer">Jawaban benar: <b>${correctAnswer}</b></div>
-                                    ${q.explanation ? `<div class="explanation">Penjelasan: ${q.explanation}</div>` : ''}
-                                </div>
-                            `;
-                        }).join('')}
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 30px 0;">
+                        <div style="background: rgba(37, 211, 102, 0.1); padding: 20px; border-radius: 12px; border: 1px solid rgba(37, 211, 102, 0.2);">
+                            <div style="font-size: 32px; font-weight: bold; color: #25D366; margin-bottom: 4px;">${result.score}</div>
+                            <div style="font-size: 14px; color: var(--text-muted);">Benar</div>
+                        </div>
+                        <div style="background: rgba(255, 59, 48, 0.1); padding: 20px; border-radius: 12px; border: 1px solid rgba(255, 59, 48, 0.2);">
+                            <div style="font-size: 32px; font-weight: bold; color: #FF3B30; margin-bottom: 4px;">${result.totalQuestions - result.score}</div>
+                            <div style="font-size: 14px; color: var(--text-muted);">Salah</div>
+                        </div>
+                        <div style="background: rgba(52, 183, 241, 0.1); padding: 20px; border-radius: 12px; border: 1px solid rgba(52, 183, 241, 0.2);">
+                            <div style="font-size: 32px; font-weight: bold; color: #34B7F1; margin-bottom: 4px;">${result.totalQuestions}</div>
+                            <div style="font-size: 14px; color: var(--text-muted);">Total Soal</div>
+                        </div>
                     </div>
                 </div>
-            `;
-        } else {
-            resultContainer.innerHTML = `
-                <div style="text-align: center; padding: 40px;">
-                    <p class="muted">Tidak ada hasil quiz yang ditemukan</p>
-                    <a href="quiz.html" class="btn primary" style="margin-top: 20px;">Mulai Quiz Baru</a>
+                
+                <h3 style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+                    <i class="fas fa-list-check"></i> Review Jawaban
+                </h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    ${result.results ? result.results.map((item, index) => `
+                        <div class="result-row ${item.isCorrect ? 'correct' : 'incorrect'}">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div>
+                                    <h4 style="margin-bottom: 4px;">Soal ${index + 1}</h4>
+                                    <p style="color: var(--text-primary);">${item.question}</p>
+                                </div>
+                                <span class="badge" style="background: ${item.isCorrect ? '#25D366' : '#FF3B30'};">
+                                    ${item.isCorrect ? 'Benar' : 'Salah'}
+                                </span>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Jawaban Anda</div>
+                                    <div style="padding: 8px 12px; background: ${item.isCorrect ? 'rgba(37, 211, 102, 0.1)' : 'rgba(255, 59, 48, 0.1)'}; border-radius: 6px; border-left: 4px solid ${item.isCorrect ? '#25D366' : '#FF3B30'};">
+                                        <strong>${item.userAnswer || 'Tidak dijawab'}</strong>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Jawaban Benar</div>
+                                    <div style="padding: 8px 12px; background: rgba(37, 211, 102, 0.1); border-radius: 6px; border-left: 4px solid #25D366;">
+                                        <strong>${item.correctAnswer}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            ${item.explanation ? `
+                                <div style="background: rgba(52, 183, 241, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid #34B7F1;">
+                                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Penjelasan</div>
+                                    <p style="color: var(--text-primary); margin: 0;">${item.explanation}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('') : ''}
+                </div>
+                
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <a href="index.html" class="btn secondary" style="flex: 1;">
+                        <i class="fas fa-home"></i> Kembali ke Home
+                    </a>
+                    <a href="quiz.html" class="btn primary" style="flex: 1;">
+                        <i class="fas fa-redo"></i> Quiz Lain
+                    </a>
                 </div>
             `;
         }
         
-        // Theme toggle
-        const themeToggle = document.getElementById('themeToggle');
-        
+        // Theme Management
         function initTheme() {
-            const savedTheme = localStorage.getItem('theme');
+            const savedTheme = localStorage.getItem('quiz-theme');
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             
             if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-                document.body.classList.add('dark');
-                themeToggle.textContent = '☀';
+                document.documentElement.setAttribute('data-theme', 'dark');
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
             }
         }
         
-        initTheme();
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('quiz-theme', newTheme);
+            
+            themeToggle.innerHTML = currentTheme === 'dark' 
+                ? '<i class="fas fa-moon"></i>' 
+                : '<i class="fas fa-sun"></i>';
+        }
         
-        themeToggle.addEventListener('click', () => {
-            const isDark = document.body.classList.toggle('dark');
-            localStorage.setItem('theme', isDark ? 'dark' : 'light');
-            themeToggle.textContent = isDark ? '☀' : '☾';
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            themeToggle.addEventListener('click', toggleTheme);
+            displayResults();
+            
+            // Clear result after displaying (optional)
+            // localStorage.removeItem('quizResult');
         });
     </script>
 </body>
