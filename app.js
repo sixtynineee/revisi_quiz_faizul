@@ -1,10 +1,9 @@
-// app.js (FINAL user-side) - Materi -> Soal flow
-// Replace your old app.js (or integrate) with this file.
-// Requires firebase config same as admin (or import the same firebase initialization).
+// app.js (REVISI: robust + compatible with different index.html variants)
+// Materi -> Soal flow with defensive DOM checks and flexible theme toggle
 
 // ---------- FIREBASE IMPORTS (CDN) ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
 // ---------- CONFIG (same as admin) ----------
 const firebaseConfig = {
@@ -36,7 +35,7 @@ async function loadCoursesRaw() {
     const snap = await getDocs(collection(db, "courses"));
     const list = [];
     snap.forEach(d => {
-      const data = d.data();
+      const data = d.data() || {};
       // normalize to materi[]
       if (!Array.isArray(data.materi)) {
         if (Array.isArray(data.questions)) {
@@ -71,7 +70,10 @@ async function loadCourseById(id) {
 async function renderCourses() {
   await loadCourses();
   const el = $('coursesList');
-  if(!el) return;
+  if(!el) {
+    console.warn('coursesList element not found');
+    return;
+  }
   el.innerHTML = '';
   if(COURSES.length === 0) { el.innerHTML = '<div class="muted">Belum ada mata kuliah.</div>'; return; }
   COURSES.forEach(course => {
@@ -96,15 +98,24 @@ async function renderCourses() {
     const c = await loadCourseById(courseId);
     if(!c) return alert('Course not found');
     CURRENT_COURSE = c;
-    renderMateriList(c);
-    showOnlySection('materiSection');
+    // If materiSection exists => render it. Else show modal fallback
+    if ($('materiSection')) {
+      renderMateriList(c);
+      showOnlySection('materiSection');
+    } else {
+      // modal fallback
+      openMateriModal(c);
+    }
   }));
 }
 
 // ---------- UI: render Materi list for a course ----------
 function renderMateriList(course) {
   const el = $('materiList');
-  if(!el) return;
+  if(!el) {
+    console.warn('materiList element not found');
+    return;
+  }
   el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><h3 style="margin:0">${escapeHtml(course.name)}</h3><div class="muted">${escapeHtml(course.description||'')}</div></div><div><button id="backToCourses" class="btn ghost sm">Kembali</button></div></div><div id="materi_cards"></div>`;
   const cards = $('materi_cards');
   const arr = Array.isArray(course.materi) ? course.materi : [];
@@ -115,8 +126,10 @@ function renderMateriList(course) {
     cards.appendChild(cdiv);
   });
 
-  // events
-  $('backToCourses').onclick = () => { showOnlySection('coursesSection'); renderCourses(); };
+  // events (safe attach)
+  const backBtn = $('backToCourses');
+  if (backBtn) backBtn.onclick = () => { showOnlySection('coursesSection'); renderCourses(); };
+
   qsa('.start-materi').forEach(b => b.addEventListener('click', (ev) => {
     const courseId = ev.currentTarget.dataset.course;
     const i = parseInt(ev.currentTarget.dataset.i,10);
@@ -129,6 +142,46 @@ function renderMateriList(course) {
   }));
 }
 
+// ---------- Modal fallback when materiSection missing ----------
+function openMateriModal(course) {
+  const modalId = 'materi_modal';
+  // avoid duplicate
+  if (document.getElementById(modalId)) return;
+  const wrapper = document.createElement('div');
+  wrapper.id = modalId;
+  wrapper.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:9999;padding:16px';
+  const content = document.createElement('div');
+  content.style = 'max-width:720px;width:100%;background:var(--card,white);padding:16px;border-radius:10px;max-height:80vh;overflow:auto';
+  content.innerHTML = `<h3 style="margin-top:0">${escapeHtml(course.name)}</h3><div class="muted">${escapeHtml(course.description||'')}</div><hr/><div id="modal_materi_list"></div><div style="text-align:right;margin-top:12px"><button id="close_materi_modal" class="btn ghost">Tutup</button></div>`;
+  wrapper.appendChild(content);
+  document.body.appendChild(wrapper);
+
+  const list = document.getElementById('modal_materi_list');
+  const arr = Array.isArray(course.materi) ? course.materi : [];
+  if (arr.length === 0) list.innerHTML = '<div class="muted">Belum ada materi.</div>';
+  else arr.forEach((m, i) => {
+    const r = document.createElement('div');
+    r.className = 'course-item';
+    r.style.marginBottom = '8px';
+    r.innerHTML = `<div><div style="font-weight:600">${escapeHtml(m.title)}</div><div class="muted">${escapeHtml(m.description||'')}</div></div><div style="display:flex;gap:8px"><button class="btn sm modal_start" data-course="${course.id}" data-i="${i}">Mulai</button> <button class="btn ghost sm modal_view" data-course="${course.id}" data-i="${i}">Lihat Soal</button></div>`;
+    list.appendChild(r);
+  });
+
+  // handlers
+  list.querySelectorAll('.modal_start').forEach(b => b.onclick = (ev) => {
+    const courseId = ev.currentTarget.dataset.course;
+    const i = parseInt(ev.currentTarget.dataset.i,10);
+    document.getElementById(modalId)?.remove();
+    startQuizFromMateri(courseId, i);
+  });
+  list.querySelectorAll('.modal_view').forEach(b => b.onclick = (ev) => {
+    const courseId = ev.currentTarget.dataset.course;
+    const i = parseInt(ev.currentTarget.dataset.i,10);
+    openMateriPreview(courseId, i);
+  });
+  document.getElementById('close_materi_modal').onclick = () => document.getElementById(modalId)?.remove();
+}
+
 // ---------- Open Materi preview (simple modal) ----------
 function openMateriPreview(courseId, index) {
   const c = COURSES.find(x=>x.id===courseId);
@@ -136,16 +189,15 @@ function openMateriPreview(courseId, index) {
   const m = c.materi && c.materi[index];
   if(!m) return;
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<div style="padding:14px"><h3 style="margin-top:0">${escapeHtml(m.title)}</h3><div class="muted">${escapeHtml(m.description||'')}</div><hr/><div>${(m.questions||[]).map((q,i)=>`<div style="margin-bottom:8px"><b>${i+1}.</b> ${escapeHtml(q.question)}</div>`).join('')}</div><div style="text-align:right;margin-top:12px"><button id="closePreview" class="btn ghost">Tutup</button></div></div>`;
-  document.body.appendChild(modalOverlay(wrap));
-  $('closePreview').onclick = () => { const mo = document.getElementById('tempModal'); mo && mo.remove(); };
-}
-function modalOverlay(contentEl) {
-  const overlay = document.createElement('div'); overlay.id = 'tempModal'; overlay.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:9999';
-  const box = document.createElement('div'); box.className = 'card'; box.style = 'max-width:800px;width:100%;max-height:80vh;overflow:auto';
-  box.appendChild(contentEl);
-  overlay.appendChild(box);
-  return overlay;
+  wrap.id = 'preview_modal';
+  wrap.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:9999;padding:16px';
+  const box = document.createElement('div');
+  box.style = 'max-width:720px;width:100%;background:var(--card,white);padding:16px;border-radius:10px;max-height:80vh;overflow:auto';
+  box.innerHTML = `<h3 style="margin-top:0">${escapeHtml(m.title)}</h3><div class="muted">${escapeHtml(m.description||'')}</div><hr/><div>${(m.questions||[]).map((q,i)=>`<div style="margin-bottom:8px"><b>${i+1}.</b> ${escapeHtml(q.question)}</div>`).join('')}</div><div style="text-align:right;margin-top:12px"><button id="closePreview" class="btn ghost">Tutup</button></div>`;
+  wrap.appendChild(box);
+  document.body.appendChild(wrap);
+  const closer = document.getElementById('closePreview');
+  if (closer) closer.onclick = () => document.getElementById('preview_modal')?.remove();
 }
 
 // ---------- Start Quiz from specific materi ----------
@@ -158,19 +210,20 @@ async function startQuizFromMateri(courseId, materiIndex) {
   CURRENT_MATERI = m;
   CURRENT_QUESTIONS = Array.isArray(m.questions) ? JSON.parse(JSON.stringify(m.questions)) : [];
   USER_ANSWERS = {};
-  // normalize question structure: options A-D etc (assume already)
-  // Shuffle questions if you want:
   CURRENT_QUESTIONS = shuffleArray(CURRENT_QUESTIONS);
   renderQuizFromCurrent();
   showOnlySection('quizSection');
 }
 
-// ---------- quiz rendering (basic, reuse your existing quiz code if present) ----------
+// ---------- quiz rendering ----------
 function renderQuizFromCurrent() {
   const titleEl = $('quizTitle');
   const container = $('quizContainer');
   if (titleEl) titleEl.textContent = `${escapeHtml(CURRENT_COURSE.name)} / ${escapeHtml(CURRENT_MATERI.title)}`;
-  if (!container) return;
+  if (!container) {
+    console.warn('quizContainer element not found');
+    return;
+  }
   container.innerHTML = '';
   CURRENT_QUESTIONS.forEach((q, idx) => {
     const card = document.createElement('div'); card.className = 'question-card'; card.id = `qcard-${idx}`;
@@ -183,6 +236,15 @@ function renderQuizFromCurrent() {
   });
   attachChoiceEventsApp();
   renderQuizHeaderApp();
+  updateProgressApp();
+  // wire legacy finish button if present
+  const legacyFinish = $('finishQuizBtn');
+  if (legacyFinish) {
+    legacyFinish.onclick = finishQuizApp;
+  }
+  // wire legacy backToCourses if present
+  const legacyBack = $('backToCourses');
+  if (legacyBack) legacyBack.onclick = () => { showOnlySection('coursesSection'); renderCourses(); };
 }
 
 function attachChoiceEventsApp() {
@@ -205,7 +267,8 @@ function renderQuizHeaderApp() {
   if(!header) return;
   const total = CURRENT_QUESTIONS.length;
   header.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600">${escapeHtml(CURRENT_MATERI.title)} — ${total} soal</div><div><button id="btnFinish" class="btn">Selesai</button></div></div>`;
-  $('btnFinish') && $('btnFinish').addEventListener('click', ()=> finishQuizApp());
+  const btn = $('btnFinish');
+  if (btn) btn.onclick = finishQuizApp;
 }
 
 function updateProgressApp() {
@@ -226,23 +289,31 @@ function finishQuizApp() {
       if(c.dataset.opt === correct) c.classList.add('final-correct');
       else if(c.dataset.opt === user) c.classList.add('final-wrong');
     });
-    $('exp-'+i) && ($('exp-'+i).style.display = 'block');
+    const exp = $('exp-'+i);
+    if(exp) exp.style.display = 'block';
     if(user === correct) score++;
   });
   const total = CURRENT_QUESTIONS.length;
-  const resultEl = $('resultSection');
-  if(resultEl) {
-    resultEl.innerHTML = `<div class="card"><h3>Hasil: ${score} / ${total}</h3><div style="margin-top:12px"><button id="backToMateri" class="btn ghost">Kembali ke Materi</button> <button id="retryBtn" class="btn">Ulangi</button></div></div>`;
-    $('backToMateri').onclick = () => { showOnlySection('materiSection'); renderMateriList(CURRENT_COURSE); };
-    $('retryBtn').onclick = () => { startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m=>m.id===CURRENT_MATERI.id)); };
+
+  // prioritize resultBox, then resultSection
+  const resultBox = $('resultBox') || $('resultSection');
+  if (resultBox) {
+    resultBox.innerHTML = `<div class="card"><h3>Hasil: ${score} / ${total}</h3><div style="margin-top:12px"><button id="backToMateri" class="btn ghost">Kembali ke Materi</button> <button id="retryBtn" class="btn">Ulangi</button></div></div>`;
+    const backBtn = $('backToMateri');
+    if (backBtn) backBtn.onclick = () => { showOnlySection('materiSection'); if(CURRENT_COURSE) renderMateriList(CURRENT_COURSE); };
+    const retry = $('retryBtn');
+    if (retry) retry.onclick = () => { startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m=>m.id===CURRENT_MATERI.id)); };
     showOnlySection('resultSection');
+  } else {
+    alert(`Hasil: ${score} / ${total}`);
+    showOnlySection('coursesSection');
   }
 }
 
 // ---------- small helpers ----------
 function showOnlySection(id) {
-  const ids = ['coursesSection','materiSection','quizSection','resultSection'];
-  ids.forEach(i => { const n = $(i); if(!n) return; n.style.display = (i===id) ? 'block' : 'none'; });
+  const known = ['coursesSection','materiSection','quizSection','resultSection'];
+  known.forEach(i => { const n = $(i); if(!n) return; n.style.display = (i===id) ? 'block' : 'none'; });
 }
 
 function shuffleArray(a) {
@@ -253,26 +324,39 @@ function shuffleArray(a) {
   return a;
 }
 
-// ---------- Init & theme ----------
+// ---------- Theme: support button or checkbox ----------
 function wireThemeToggle() {
   const t = $('themeToggle');
   try {
     const saved = localStorage.getItem('theme') || 'light';
     document.body.classList.toggle('dark', saved === 'dark');
-    if(t) t.checked = saved === 'dark';
-    if(t) t.addEventListener('change', () => {
-      const val = t.checked ? 'dark' : 'light';
-      document.body.classList.toggle('dark', val === 'dark');
-      try { localStorage.setItem('theme', val); } catch(e){}
-    });
-  } catch(e){}
+    // If it's a checkbox input
+    if (t && (t.tagName.toLowerCase() === 'input' && t.type === 'checkbox')) {
+      t.checked = saved === 'dark';
+      t.addEventListener('change', () => {
+        const val = t.checked ? 'dark' : 'light';
+        document.body.classList.toggle('dark', val === 'dark');
+        try { localStorage.setItem('theme', val); } catch(e){}
+      });
+    } else if (t) {
+      // treat as button toggle
+      const updateIcon = (isDark) => { t.textContent = isDark ? '☀' : '☾'; };
+      updateIcon(saved === 'dark');
+      t.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('dark');
+        updateIcon(isDark);
+        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
+      });
+    }
+  } catch(e){
+    console.warn('theme toggle error', e);
+  }
 }
 
+// ---------- Init & boot ----------
 async function initApp() {
   wireThemeToggle();
   await renderCourses();
   showOnlySection('coursesSection');
 }
-
-// ---------- Boot ----------
 document.addEventListener('DOMContentLoaded', initApp);
