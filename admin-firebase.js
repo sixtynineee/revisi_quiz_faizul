@@ -1,4 +1,4 @@
-// admin-firebase.js - Admin Login dengan Firebase Authentication
+// admin-firebase.js - Admin Authentication & Dashboard
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -16,10 +16,29 @@ import {
   onAuthStateChanged,
   signOut 
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
+  Timestamp,
+  increment
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
 // Initialize
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
+
+// State
+let currentView = 'mata-kuliah';
+let currentMataKuliah = null;
+let currentCourse = null;
 
 // DOM Elements
 const loginForm = document.getElementById('loginForm');
@@ -27,83 +46,107 @@ const loginStatus = document.getElementById('loginStatus');
 const themeToggle = document.getElementById('themeToggle');
 
 // Login Handler
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  
-  loginStatus.textContent = 'Sedang login...';
-  loginStatus.style.color = 'var(--text-primary)';
-  
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+if (loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     
-    // Check if user is admin (you can add custom logic here)
-    // For example, check if email ends with admin domain
-    if (user.email) {
-      loginStatus.textContent = 'Login berhasil! Mengarahkan ke dashboard...';
-      loginStatus.style.color = 'var(--success)';
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    
+    loginStatus.textContent = 'Sedang login...';
+    loginStatus.className = '';
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
       
-      // Redirect to edit.html after 1 second
+      loginStatus.textContent = 'Login berhasil! Mengarahkan...';
+      loginStatus.className = 'success';
+      
+      // Simpan token login di localStorage
+      localStorage.setItem('adminToken', user.uid);
+      localStorage.setItem('adminEmail', user.email);
+      
+      // Redirect ke dashboard setelah 1 detik
       setTimeout(() => {
         window.location.href = 'edit.html';
       }, 1000);
-    } else {
-      loginStatus.textContent = 'Akun ini bukan admin. Hubungi developer.';
-      loginStatus.style.color = 'var(--danger)';
-      await signOut(auth);
+      
+    } catch (error) {
+      console.error("Login error:", error);
+      loginStatus.textContent = getErrorMessage(error.code);
+      loginStatus.className = 'error';
     }
-  } catch (error) {
-    console.error("Login error:", error);
-    
-    switch (error.code) {
-      case 'auth/invalid-email':
-        loginStatus.textContent = 'Email tidak valid';
-        break;
-      case 'auth/user-disabled':
-        loginStatus.textContent = 'Akun dinonaktifkan';
-        break;
-      case 'auth/user-not-found':
-        loginStatus.textContent = 'Akun tidak ditemukan';
-        break;
-      case 'auth/wrong-password':
-        loginStatus.textContent = 'Password salah';
-        break;
-      default:
-        loginStatus.textContent = 'Login gagal: ' + error.message;
-    }
-    
-    loginStatus.style.color = 'var(--danger)';
-  }
-});
+  });
+}
 
-// Check auth state
+// Error messages
+function getErrorMessage(errorCode) {
+  const messages = {
+    'auth/invalid-email': 'Email tidak valid',
+    'auth/user-disabled': 'Akun dinonaktifkan',
+    'auth/user-not-found': 'Akun tidak ditemukan',
+    'auth/wrong-password': 'Password salah',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi nanti.',
+    'auth/network-request-failed': 'Koneksi internet bermasalah'
+  };
+  return messages[errorCode] || 'Login gagal. Cek email dan password.';
+}
+
+// Check Auth State
 onAuthStateChanged(auth, (user) => {
-  if (user) {
-    // User is signed in, redirect to edit.html if not already there
-    if (!window.location.href.includes('edit.html')) {
-      window.location.href = 'edit.html';
-    }
+  // If on edit.html and not logged in, redirect to admin.html
+  if (window.location.pathname.includes('edit.html') && !user) {
+    window.location.href = 'admin.html';
+  }
+  
+  // If on admin.html and already logged in, redirect to edit.html
+  if (window.location.pathname.includes('admin.html') && user) {
+    window.location.href = 'edit.html';
   }
 });
 
 // Theme Management
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme');
+  const savedTheme = localStorage.getItem('quiz-theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   
   if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-    document.body.classList.add('dark');
-    themeToggle.textContent = '☀';
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (themeToggle) {
+      themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+    }
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    if (themeToggle) {
+      themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+    }
   }
 }
 
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('quiz-theme', newTheme);
+  updateThemeIcon();
+}
+
+function updateThemeIcon() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  if (themeToggle) {
+    themeToggle.innerHTML = currentTheme === 'dark' 
+      ? '<i class="fas fa-sun"></i>' 
+      : '<i class="fas fa-moon"></i>';
+  }
+}
+
+// Initialize
+if (themeToggle) {
+  themeToggle.addEventListener('click', toggleTheme);
+}
 initTheme();
 
-themeToggle.addEventListener('click', () => {
-  const isDark = document.body.classList.toggle('dark');
-  localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  themeToggle.textContent = isDark ? '☀' : '☾';
-});
+// Export functions for edit.js
+export { auth, db, signOut, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, increment };
