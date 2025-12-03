@@ -1,4 +1,4 @@
-// app.js - Home Page Script
+// app.js - Home Page Script (User)
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -61,6 +61,7 @@ async function loadMataKuliah() {
         </div>
       `;
       totalCourses.textContent = "0 Mata Kuliah";
+      totalQuestions.textContent = "0 Soal";
       return;
     }
     
