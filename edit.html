@@ -3,47 +3,60 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Edit Soal</title>
+    <title>QuizApp - Admin Dashboard</title>
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
     <div class="app">
         <header class="topbar">
-            <h1>Edit Soal</h1>
+            <h1>⚙️ Admin Dashboard</h1>
             <div class="top-actions">
-                <a class="btn" href="admin.html">Kembali</a>
+                <button id="themeToggle" class="btn circle">☾</button>
+                <button id="logoutBtn" class="btn">Logout</button>
+                <a class="btn" href="index.html">Home</a>
             </div>
         </header>
 
         <main class="container">
-            <section class="card">
-                <form id="editQuestionForm" class="stack">
-                    <h3 id="editingQuestionTitle"></h3>
-                    <textarea id="edit_q_text" placeholder="Pertanyaan..." required></textarea>
-                    <input id="edit_q_a" placeholder="Pilihan A" required/>
-                    <input id="edit_q_b" placeholder="Pilihan B" required/>
-                    <input id="edit_q_c" placeholder="Pilihan C" required/>
-                    <input id="edit_q_d" placeholder="Pilihan D" required/>
-                    <select id="edit_q_answer">
-                        <option value="A">Jawaban benar: A</option>
-                        <option value="B">Jawaban benar: B</option>
-                        <option value="C">Jawaban benar: C</option>
-                        <option value="D">Jawaban benar: D</option>
-                    </select>
-                    <input id="edit_q_explain" placeholder="Penjelasan jawaban" />
-                    <div class="actions-row">
-                        <button type="submit" class="btn primary">Simpan Perubahan</button>
-                        <button type="button" id="cancelEdit" class="btn">Batal</button>
+            <div class="admin-container">
+                <!-- Sidebar -->
+                <aside class="left-panel card">
+                    <h3>Menu Admin</h3>
+                    <div class="menu">
+                        <button class="menu-btn active" data-view="mata-kuliah">📚 Mata Kuliah</button>
+                        <button class="menu-btn" data-view="courses">📂 Courses</button>
+                        <button class="menu-btn" data-view="soal">📝 Soal</button>
+                        <button class="menu-btn" data-view="stats">📊 Statistik</button>
                     </div>
-                </form>
-            </section>
+                    
+                    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                        <p class="muted" id="userEmail"></p>
+                        <button id="refreshBtn" class="btn" style="width: 100%; margin-top: 10px;">
+                            🔄 Refresh Data
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Main Content -->
+                <section class="right-panel card">
+                    <div id="contentTitle">
+                        <h2>Dashboard Admin</h2>
+                        <p class="muted" id="contentSubtitle">Selamat datang di panel admin</p>
+                    </div>
+                    
+                    <div id="adminContent">
+                        <!-- Content will be loaded here -->
+                        <p class="muted">Pilih menu di sebelah kiri untuk mulai mengelola</p>
+                    </div>
+                </section>
+            </div>
         </main>
 
         <footer class="footer">
-            <small>Edit Soal — Form akan otomatis terisi saat buka halaman edit.</small>
+            <small>© 2024 QuizApp • Admin Dashboard</small>
         </footer>
     </div>
 
-    <script type="module" src="user.js"></script>
+    <script type="module" src="edit.js"></script>
 </body>
 </html>
