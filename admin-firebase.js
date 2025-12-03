@@ -1,22 +1,19 @@
-// admin-firebase.js — FULL FINAL (single-file, copy-paste)
-// - Auth (no role check)
-// - Auto-detect root courses collection ('courses' or 'mata_kuliah')
-// - Supports embedded materi[] OR materi subcollection
-// - Soal stored in top-level 'soal' collection (compatible with user.js 'courses' structure)
-// - Add/Edit/Delete for course, materi, soal
-// - Theme toggle preserved
-// Requires: admin.html (ids used in this script) and Firebase config
+// admin-firebase.js
+// Compatible with user.js structure (courses collection, materi as embedded array OR subcollection)
+// Uses Firebase modular SDK v9.x (same style as user.js)
+// Paste this file as-is into your project and include it in admin.html (type=module)
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+// ---------- IMPORTS ----------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, getDoc,
-  query, orderBy, where
-} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+  getFirestore, collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
+  query, where, orderBy
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
-/* ---------- CONFIG (use your project's config) ---------- */
+// ---------- FIREBASE CONFIG (use your config) ----------
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -30,12 +27,24 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-/* ---------- DOM helpers ---------- */
+// ---------- DOM helpers ----------
 const $ = id => document.getElementById(id);
 const qsa = sel => Array.from(document.querySelectorAll(sel || ''));
+
 const safe = v => (v === undefined || v === null) ? '' : String(v);
 
-/* ---------- DOM refs expected in admin.html ---------- */
+// ---------- UI refs (from your admin HTML) ----------
+const loginBox = $('loginBox');
+const loginForm = $('loginForm');
+const loginEmail = $('loginEmail');
+const loginPass = $('loginPass');
+
+const adminMain = $('adminMain');
+const sidebarBox = $('sidebarBox');
+const logoutWrap = $('logoutWrap');
+const signedEmail = $('signedEmail');
+const btnLogout = $('btnLogout');
+
 const coursesView = $('coursesView');
 const coursesAdminList = $('coursesAdminList');
 const addCourseBtn = $('addCourseBtn');
@@ -50,130 +59,106 @@ const soalList = $('soalList');
 const soalMateriTitle = $('soalMateriTitle');
 const addSoalBtn = $('addSoalBtn');
 
-const loginForm = $('loginForm');
-const loginEmail = $('loginEmail');
-const loginPass = $('loginPass');
+const btnRefresh = $('btnRefresh');
 
-const logoutWrap = $('logoutWrap');
-const signedEmail = $('signedEmail');
-const btnLogout = $('btnLogout');
-
-const themeBtn = $('themeBtnAdmin');
-const themeCheckbox = $('themeToggleAdmin');
-
-/* ---------- Local state ---------- */
-let selectedCourseId = null;
-let selectedMateriId = null;
-let selectedCourseName = '';
+// ---------- local state ----------
 let ROOT_COLLECTION = null; // 'courses' or 'mata_kuliah'
+let selectedCourseId = null;
+let selectedCourseData = null; // course doc data (used for embedded)
+let selectedMateriId = null; // materi doc id or embedded index (string)
+let selectedMateriTitle = '';
 
-/* ---------- UI small helpers ---------- */
+// ---------- tiny toast ----------
 function toast(msg, type='info') {
   try {
-    const t = document.createElement('div');
-    t.textContent = msg;
-    t.style.position = 'fixed';
-    t.style.right = '20px';
-    t.style.top = '20px';
-    t.style.padding = '8px 12px';
-    t.style.color = '#fff';
-    t.style.borderRadius = '8px';
-    t.style.zIndex = 99999;
-    t.style.background = type === 'error' ? '#ef4444' : (type === 'success' ? '#16a34a' : '#0b74de');
-    document.body.appendChild(t);
-    setTimeout(()=> t.style.opacity = '0', 2000);
-    setTimeout(()=> t.remove(), 2400);
+    const el = document.createElement('div');
+    el.textContent = msg;
+    el.style.position = 'fixed';
+    el.style.right = '18px';
+    el.style.top = '18px';
+    el.style.padding = '8px 12px';
+    el.style.borderRadius = '8px';
+    el.style.zIndex = 999999;
+    el.style.color = '#fff';
+    el.style.background = type === 'error' ? '#ef4444' : (type === 'success' ? '#16a34a' : '#0b74de');
+    document.body.appendChild(el);
+    setTimeout(()=> el.style.opacity = '0', 1700);
+    setTimeout(()=> el.remove(), 2100);
   } catch(e){ console.warn(e); }
 }
+
+// ---------- show/hide helpers (FIXED) ----------
 function hideAllAdminPanels() {
   if (coursesView) coursesView.style.display = 'none';
   if (materiPanel) materiPanel.style.display = 'none';
   if (soalPanel) soalPanel.style.display = 'none';
   if (logoutWrap) logoutWrap.style.display = 'none';
+  if (adminMain) adminMain.style.display = 'none';
+  if (sidebarBox) sidebarBox.style.display = 'none';
+  if (loginBox) loginBox.style.display = 'none';
+  if (loginForm) loginForm.style.display = 'none';
 }
+
 function showLoginOnly() {
   hideAllAdminPanels();
+  if (loginBox) loginBox.style.display = 'block';
   if (loginForm) loginForm.style.display = 'block';
 }
+
 function showAdminUI(user) {
-  if (loginForm) loginForm.style.display = 'none';
+  hideAllAdminPanels();
+  if (adminMain) adminMain.style.display = 'block';
+  if (sidebarBox) sidebarBox.style.display = 'block';
   if (coursesView) coursesView.style.display = 'flex';
   if (logoutWrap) logoutWrap.style.display = 'block';
-  if (signedEmail) signedEmail.textContent = user.email || user.uid || '';
+  if (signedEmail) signedEmail.textContent = user?.email || user?.uid || '';
 }
 
-/* ---------- Theme wiring ---------- */
-function applyThemeFromStorage() {
-  try {
-    const saved = localStorage.getItem('theme') || 'light';
-    const isDark = saved === 'dark';
-    document.body.classList.toggle('dark', isDark);
-    if (themeCheckbox && themeCheckbox.tagName === 'INPUT') themeCheckbox.checked = isDark;
-    if (themeBtn) themeBtn.textContent = isDark ? '☀' : '☾';
-  } catch(e){}
-}
-function wireThemeControls() {
-  applyThemeFromStorage();
-  if (themeCheckbox && themeCheckbox.tagName === 'INPUT') {
-    themeCheckbox.addEventListener('change', () => {
-      const isDark = !!themeCheckbox.checked;
-      document.body.classList.toggle('dark', isDark);
-      try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
-      if (themeBtn) themeBtn.textContent = isDark ? '☀' : '☾';
-    });
-  }
-  if (themeBtn) {
-    themeBtn.addEventListener('click', () => {
-      const isDark = document.body.classList.toggle('dark');
-      try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
-      if (themeCheckbox && themeCheckbox.tagName === 'INPUT') themeCheckbox.checked = isDark;
-      themeBtn.textContent = isDark ? '☀' : '☾';
-    });
-  }
-}
-
-/* ---------- Detect root collection (courses vs mata_kuliah) ---------- */
+// ---------- detect root collection ----------
 async function determineRootCollection() {
+  if (ROOT_COLLECTION) return ROOT_COLLECTION;
   try {
-    const cSnap = await getDocs(query(collection(db, 'courses'), orderBy('createdAt','desc')));
-    if (!cSnap.empty) { ROOT_COLLECTION = 'courses'; return ROOT_COLLECTION; }
+    // try 'courses'
+    const snap = await getDocs(query(collection(db, 'courses'), orderBy('createdAt','desc')));
+    if (!snap.empty) { ROOT_COLLECTION = 'courses'; return ROOT_COLLECTION; }
   } catch(e){ /* ignore */ }
   try {
-    const mSnap = await getDocs(query(collection(db, 'mata_kuliah'), orderBy('createdAt','desc')));
-    if (!mSnap.empty) { ROOT_COLLECTION = 'mata_kuliah'; return ROOT_COLLECTION; }
+    const snap2 = await getDocs(query(collection(db, 'mata_kuliah'), orderBy('createdAt','desc')));
+    if (!snap2.empty) { ROOT_COLLECTION = 'mata_kuliah'; return ROOT_COLLECTION; }
   } catch(e){ /* ignore */ }
-  // default to 'courses' for compatibility with user.js
+  // default
   ROOT_COLLECTION = 'courses';
   return ROOT_COLLECTION;
 }
 
-/* ---------- COURSES: load, add, edit, delete ---------- */
+// ---------- COURSES: load ---------- 
 async function loadCourses() {
   if (!coursesAdminList) return;
   coursesAdminList.innerHTML = `<div class="muted">Memuat...</div>`;
   try {
-    if (!ROOT_COLLECTION) await determineRootCollection();
-    const q = query(collection(db, ROOT_COLLECTION), orderBy('createdAt','desc'));
-    const snap = await getDocs(q);
+    await determineRootCollection();
+    const colRef = collection(db, ROOT_COLLECTION);
+    const snaps = await getDocs(query(colRef, orderBy('createdAt','desc')));
 
-    if (snap.empty) {
+    if (snaps.empty) {
       coursesAdminList.innerHTML = `<div class="muted">Belum ada mata kuliah.</div>`;
       return;
     }
 
     coursesAdminList.innerHTML = '';
-    snap.forEach(docSnap => {
-      const d = docSnap.data() || {};
-      const id = docSnap.id;
+    snaps.forEach(snap => {
+      const d = snap.data() || {};
+      const id = snap.id;
+      const name = d.name || d.nama || 'Untitled';
+      const desc = d.description || d.desc || d.deskripsi || '';
+      const materiCount = Array.isArray(d.materi) ? d.materi.length : '(subcollection?)';
+
       const item = document.createElement('div');
       item.className = 'admin-item';
-      // name fields might be 'name' or 'nama', description 'desc'/'description'/'deskripsi'
-      const nameVal = d.name || d.nama || '';
-      const descVal = d.description || d.desc || d.deskripsi || '';
       item.innerHTML = `
         <div>
-          <div style="font-weight:600">${safe(nameVal)}</div>
-          <div class="muted" style="font-size:12px">${safe(descVal)}</div>
+          <div style="font-weight:600">${safe(name)}</div>
+          <div class="muted" style="font-size:12px">${safe(desc)}</div>
         </div>
         <div class="admin-actions">
           <button class="btn sm" data-open="${id}">Materi</button>
@@ -182,23 +167,18 @@ async function loadCourses() {
         </div>
       `;
 
-      const openBtn = item.querySelector('[data-open]');
-      openBtn?.addEventListener('click', () => openMateri(id, nameVal));
+      item.querySelector('[data-open]')?.addEventListener('click', () => {
+        openMateri(id, name);
+      });
 
-      const editBtn = item.querySelector('[data-edit]');
-      editBtn?.addEventListener('click', async () => {
-        const newName = prompt('Edit nama mata kuliah:', nameVal);
+      item.querySelector('[data-edit]')?.addEventListener('click', async () => {
+        const newName = prompt('Edit nama mata kuliah:', name);
         if (!newName) return;
-        const newDesc = prompt('Edit deskripsi (opsional):', descVal || '') || '';
+        const newDesc = prompt('Edit deskripsi (opsional):', desc || '') || '';
         const updateObj = {};
-        // write fields matching existing shape if possible
-        if (d.name !== undefined || ROOT_COLLECTION === 'courses') {
-          updateObj.name = newName;
-          updateObj.description = newDesc;
-        } else {
-          updateObj.nama = newName;
-          updateObj.deskripsi = newDesc;
-        }
+        // prefer writing 'name' & 'description' for compatibility with user.js
+        updateObj.name = newName;
+        updateObj.description = newDesc;
         try {
           await updateDoc(doc(db, ROOT_COLLECTION, id), updateObj);
           toast('Mata kuliah diperbarui', 'success');
@@ -206,25 +186,22 @@ async function loadCourses() {
         } catch(e){ console.error(e); toast('Gagal update', 'error'); }
       });
 
-      const delBtn = item.querySelector('[data-del]');
-      delBtn?.addEventListener('click', async () => {
-        if (!confirm('Hapus mata kuliah ini? Semua materi & soal akan dihapus.')) return;
+      item.querySelector('[data-del]')?.addEventListener('click', async () => {
+        if (!confirm('Hapus mata kuliah ini? Semua materi & soal terkait akan dihapus (jika ada).')) return;
         try {
-          // delete materi subcollection if exists
-          const materiRef = collection(db, ROOT_COLLECTION, id, 'materi');
-          const matSnap = await getDocs(materiRef);
+          // attempt delete materi subcollection docs
+          const matCol = collection(db, ROOT_COLLECTION, id, 'materi');
+          const matSnap = await getDocs(matCol);
           for (const m of matSnap.docs) {
-            // delete soal that points to this materi id
-            const soalQ = query(collection(db, 'soal'), where('materiId','==', m.id));
-            const soalSnap = await getDocs(soalQ);
-            for (const s of soalSnap.docs) {
-              await deleteDoc(doc(db, 'soal', s.id));
-            }
-            // delete materi doc
+            // delete soal referencing this materi (top-level 'soal')
+            try {
+              const soalQ = query(collection(db, 'soal'), where('materiId','==', m.id));
+              const soalSnap = await getDocs(soalQ);
+              for (const s of soalSnap.docs) await deleteDoc(doc(db, 'soal', s.id));
+            } catch(_) {}
             await deleteDoc(doc(db, ROOT_COLLECTION, id, 'materi', m.id));
           }
-          // Also attempt to delete embedded materi array if present (no direct easy delete; skip)
-          // delete course doc
+          // delete the course doc
           await deleteDoc(doc(db, ROOT_COLLECTION, id));
           toast('Mata kuliah dihapus', 'success');
           loadCourses();
@@ -240,6 +217,7 @@ async function loadCourses() {
   }
 }
 
+// add course
 addCourseBtn?.addEventListener('click', async () => {
   try {
     const name = prompt('Nama mata kuliah:');
@@ -253,40 +231,43 @@ addCourseBtn?.addEventListener('click', async () => {
     });
     toast('Mata kuliah ditambahkan', 'success');
     loadCourses();
-  } catch(e){ console.error(e); toast('Gagal tambah', 'error'); }
+  } catch(e){ console.error(e); toast('Gagal tambah mata kuliah', 'error'); }
 });
 
-/* ---------- MATERI: open, add, edit, delete
-   Supports:
-   - subcollection: ROOT_COLLECTION/{courseId}/materi/{materiId}
-   - fallback embedded array: courseDoc.materi (not created/edited here except when explicit)
-*/ 
+// ---------- MATERI: open / load / add / edit / delete ----------
+
 async function openMateri(courseId, courseName='') {
   selectedCourseId = courseId;
-  selectedCourseName = courseName || '';
+  selectedCourseData = null;
   selectedMateriId = null;
-  if (materiCourseTitle) materiCourseTitle.textContent = `Materi — ${selectedCourseName || ''}`;
-  if (materiPanel) materiPanel.style.display = 'block';
-  if (soalPanel) soalPanel.style.display = 'none';
-  if (!materiList) return;
+  selectedMateriTitle = '';
 
+  if (materiCourseTitle) materiCourseTitle.textContent = `Materi — ${courseName}`;
+  if (materiPanel) { materiPanel.style.display = 'block'; }
+  if (soalPanel) { soalPanel.style.display = 'none'; }
+
+  // load materi (prefer subcollection)
+  if (!materiList) return;
   materiList.innerHTML = `<div class="muted">Memuat...</div>`;
+
   try {
-    // Try subcollection first
-    const mq = query(collection(db, ROOT_COLLECTION, courseId, 'materi'), orderBy('createdAt','desc'));
-    const msnap = await getDocs(mq);
-    if (!msnap.empty) {
+    // check subcollection
+    const matColRef = collection(db, ROOT_COLLECTION, courseId, 'materi');
+    const matSnap = await getDocs(query(matColRef, orderBy('createdAt','desc')));
+    if (!matSnap.empty) {
+      // show subcollection materi
       materiList.innerHTML = '';
-      msnap.forEach(docSnap => {
-        const d = docSnap.data() || {};
-        const mid = docSnap.id;
+      matSnap.forEach(mSnap => {
+        const m = mSnap.data() || {};
+        const mid = mSnap.id;
+        const judul = m.judul || m.title || 'Untitled';
+        const isi = m.isi || m.description || m.desc || '';
+
         const node = document.createElement('div');
         node.className = 'admin-item';
-        const title = d.judul || d.title || '';
-        const isi = d.isi || d.description || d.desc || '';
         node.innerHTML = `
           <div>
-            <div style="font-weight:600">${safe(title)}</div>
+            <div style="font-weight:600">${safe(judul)}</div>
             <div class="muted" style="font-size:12px">${safe(isi)}</div>
           </div>
           <div class="admin-actions">
@@ -297,36 +278,30 @@ async function openMateri(courseId, courseName='') {
         `;
         node.querySelector('[data-open]')?.addEventListener('click', () => {
           selectedMateriId = mid;
-          openSoal(mid, title);
+          selectedMateriTitle = judul;
+          openSoal(mid, judul);
         });
         node.querySelector('[data-edit]')?.addEventListener('click', async () => {
-          const newTitle = prompt('Edit judul materi:', title || '');
-          if (!newTitle) return;
+          const newJudul = prompt('Edit judul materi:', judul);
+          if (!newJudul) return;
           const newIsi = prompt('Edit isi materi (opsional):', isi || '') || '';
           try {
-            // write fields as used
-            const updateObj = {};
-            updateObj.judul = newTitle;
-            updateObj.isi = newIsi;
-            // also set title/description to be safe for other consumers
-            updateObj.title = newTitle;
-            updateObj.description = newIsi;
+            const updateObj = { judul: newJudul, isi: newIsi, title: newJudul, description: newIsi };
             await updateDoc(doc(db, ROOT_COLLECTION, courseId, 'materi', mid), updateObj);
-            toast('Materi diperbarui', 'success');
-            openMateri(courseId, selectedCourseName);
+            toast('Materi subcollection diperbarui', 'success');
+            openMateri(courseId, courseName);
           } catch(e){ console.error(e); toast('Gagal update materi', 'error'); }
         });
         node.querySelector('[data-del]')?.addEventListener('click', async () => {
-          if (!confirm('Hapus materi ini? Daftar soal akan dihapus juga.')) return;
+          if (!confirm('Hapus materi ini? Soal terkait dihapus juga.')) return;
           try {
             // delete soal referencing this materi
             const soalQ = query(collection(db, 'soal'), where('materiId','==', mid));
             const ssnap = await getDocs(soalQ);
             for (const s of ssnap.docs) await deleteDoc(doc(db, 'soal', s.id));
-            // delete materi doc
             await deleteDoc(doc(db, ROOT_COLLECTION, courseId, 'materi', mid));
             toast('Materi dihapus', 'success');
-            openMateri(courseId, selectedCourseName);
+            openMateri(courseId, courseName);
           } catch(e){ console.error(e); toast('Gagal hapus materi', 'error'); }
         });
 
@@ -335,22 +310,25 @@ async function openMateri(courseId, courseName='') {
       return;
     }
 
-    // Fallback: check embedded materi array inside course doc
+    // fallback: load embedded materi array from course doc
     const courseRef = doc(db, ROOT_COLLECTION, courseId);
     const cSnap = await getDoc(courseRef);
     if (!cSnap.exists()) {
       materiList.innerHTML = `<div class="muted">Course tidak ditemukan.</div>`;
       return;
     }
-    const courseData = cSnap.data() || {};
-    const embedded = Array.isArray(courseData.materi) ? courseData.materi : [];
+    const cData = cSnap.data() || {};
+    selectedCourseData = cData; // store for embedded operations
+    const embedded = Array.isArray(cData.materi) ? cData.materi : [];
+
     if (embedded.length === 0) {
       materiList.innerHTML = `<div class="muted">Belum ada materi.</div>`;
       return;
     }
+
     materiList.innerHTML = '';
     embedded.forEach((m, idx) => {
-      const title = m.title || m.judul || '';
+      const title = m.title || m.judul || 'Untitled';
       const isi = m.description || m.isi || m.desc || '';
       const node = document.createElement('div');
       node.className = 'admin-item';
@@ -366,9 +344,9 @@ async function openMateri(courseId, courseName='') {
         </div>
       `;
       node.querySelector('[data-open-emb]')?.addEventListener('click', () => {
-        selectedMateriId = String(idx); // index-based reference
-        // pass courseData so openSoalEmbedded can use it
-        openSoalEmbedded(courseId, idx, title, courseData);
+        selectedMateriId = String(idx); // index as string
+        selectedMateriTitle = title;
+        openSoalEmbedded(courseId, idx, title, cData);
       });
       node.querySelector('[data-edit-emb]')?.addEventListener('click', async () => {
         const newTitle = prompt('Edit judul materi (embedded):', title || '');
@@ -379,7 +357,7 @@ async function openMateri(courseId, courseName='') {
           embedded[idx].description = newIsi;
           await updateDoc(courseRef, { materi: embedded });
           toast('Materi embedded diperbarui', 'success');
-          openMateri(courseId, selectedCourseName);
+          openMateri(courseId, courseName);
         } catch(e){ console.error(e); toast('Gagal update embedded', 'error'); }
       });
       node.querySelector('[data-del-emb]')?.addEventListener('click', async () => {
@@ -388,61 +366,90 @@ async function openMateri(courseId, courseName='') {
           embedded.splice(idx, 1);
           await updateDoc(courseRef, { materi: embedded });
           toast('Materi embedded dihapus', 'success');
-          openMateri(courseId, selectedCourseName);
+          openMateri(courseId, courseName);
         } catch(e){ console.error(e); toast('Gagal hapus embedded', 'error'); }
       });
 
       materiList.appendChild(node);
     });
 
-  } catch(e){ console.error(e); materiList.innerHTML = `<div class="muted">Gagal memuat materi.</div>`; }
+  } catch(e) {
+    console.error(e);
+    materiList.innerHTML = `<div class="muted">Gagal memuat materi.</div>`;
+  }
 }
 
+// add materi (will try subcollection first -- if none, update embedded array)
 addMateriBtn?.addEventListener('click', async () => {
   try {
     if (!selectedCourseId) return toast('Pilih mata kuliah terlebih dahulu', 'error');
     const judul = prompt('Judul materi:');
     if (!judul) return;
     const isi = prompt('Isi materi (opsional):') || '';
-    // Prefer subcollection
-    // create materi doc under ROOT_COLLECTION/{courseId}/materi
-    await addDoc(collection(db, ROOT_COLLECTION, selectedCourseId, 'materi'), {
-      judul,
-      isi,
+
+    // try to write to subcollection
+    try {
+      const mColRef = collection(db, ROOT_COLLECTION, selectedCourseId, 'materi');
+      // check if subcollection exists by attempting getDocs
+      const msnap = await getDocs(mColRef);
+      // If accessible (no rules blocking), add to subcollection
+      await addDoc(mColRef, {
+        judul,
+        isi,
+        title: judul,
+        description: isi,
+        createdAt: Date.now()
+      });
+      toast('Materi ditambahkan (subcollection)', 'success');
+      openMateri(selectedCourseId, selectedCourseData?.name || '');
+      return;
+    } catch(_) {
+      // fallback to embedded
+    }
+
+    // fallback: embedded array
+    const courseRef = doc(db, ROOT_COLLECTION, selectedCourseId);
+    const cSnap = await getDoc(courseRef);
+    const cData = cSnap.exists() ? cSnap.data() : {};
+    const embedded = Array.isArray(cData.materi) ? cData.materi : [];
+    embedded.unshift({
+      id: 'm-' + Date.now(),
       title: judul,
       description: isi,
-      createdAt: Date.now()
+      questions: []
     });
-    toast('Materi ditambahkan', 'success');
-    openMateri(selectedCourseId, selectedCourseName);
+    await updateDoc(courseRef, { materi: embedded });
+    toast('Materi embedded ditambahkan', 'success');
+    openMateri(selectedCourseId, selectedCourseData?.name || '');
   } catch(e){ console.error(e); toast('Gagal tambah materi', 'error'); }
 });
 
-/* ---------- SOAL: open, add, edit, delete ----------
-   Soal is top-level collection with field materiId referencing materi doc id or embedded index.
-*/
+// ---------- SOAL ----------
+// open soal for materi (top-level soal collection)
 async function openSoal(materiId, materiTitle='') {
   selectedMateriId = materiId;
-  if (soalMateriTitle) soalMateriTitle.textContent = `Soal — ${materiTitle || ''}`;
-  if (soalPanel) soalPanel.style.display = 'block';
+  selectedMateriTitle = materiTitle || '';
+  if (soalMateriTitle) soalMateriTitle.textContent = `Soal — ${selectedMateriTitle}`;
+
+  if (soalPanel) { soalPanel.style.display = 'block'; }
   if (!soalList) return;
 
   soalList.innerHTML = `<div class="muted">Memuat...</div>`;
   try {
-    const q = query(collection(db, 'soal'), where('materiId','==', materiId), orderBy('createdAt','desc'));
+    const q = query(collection(db, 'soal'), where('materiId','==', materiId));
     const snap = await getDocs(q);
     if (snap.empty) {
       soalList.innerHTML = `<div class="muted">Belum ada soal.</div>`;
       return;
     }
     soalList.innerHTML = '';
-    snap.forEach(docSnap => {
-      const d = docSnap.data() || {};
-      const sid = docSnap.id;
-      const node = document.createElement('div');
-      node.className = 'admin-item';
+    snap.forEach(s => {
+      const d = s.data() || {};
+      const sid = s.id;
       const qtext = d.question || d.pertanyaan || d.text || '';
       const correct = d.correct || d.kunci || '';
+      const node = document.createElement('div');
+      node.className = 'admin-item';
       node.innerHTML = `
         <div>
           <div style="font-weight:600">${safe(qtext)}</div>
@@ -460,7 +467,7 @@ async function openSoal(materiId, materiTitle='') {
         try {
           await updateDoc(doc(db, 'soal', sid), { question: newQ, correct: newCorrect });
           toast('Soal diperbarui', 'success');
-          openSoal(materiId, materiTitle);
+          openSoal(materiId, selectedMateriTitle);
         } catch(e){ console.error(e); toast('Gagal update soal', 'error'); }
       });
       node.querySelector('[data-del]')?.addEventListener('click', async () => {
@@ -468,7 +475,7 @@ async function openSoal(materiId, materiTitle='') {
         try {
           await deleteDoc(doc(db, 'soal', sid));
           toast('Soal dihapus', 'success');
-          openSoal(materiId, materiTitle);
+          openSoal(materiId, selectedMateriTitle);
         } catch(e){ console.error(e); toast('Gagal hapus soal', 'error'); }
       });
 
@@ -477,24 +484,27 @@ async function openSoal(materiId, materiTitle='') {
   } catch(e){ console.error(e); soalList.innerHTML = `<div class="muted">Gagal memuat soal.</div>`; }
 }
 
-/* Helper for embedded materi (index-based) */
+// open soal for embedded materi (index)
 function openSoalEmbedded(courseId, materiIndex, title, courseData) {
-  // courseData: full course doc data containing materi array
-  selectedMateriId = String(materiIndex); // treat as index
+  selectedMateriId = String(materiIndex);
+  selectedMateriTitle = title || '';
+  if (soalMateriTitle) soalMateriTitle.textContent = `Soal — ${selectedMateriTitle}`;
+  soalPanel.style.display = 'block';
+  soalList.innerHTML = '';
+
   const questions = (courseData && Array.isArray(courseData.materi) && courseData.materi[materiIndex] && Array.isArray(courseData.materi[materiIndex].questions))
     ? courseData.materi[materiIndex].questions
     : [];
-  // render embedded questions (read-only edit will update course doc)
-  soalList.innerHTML = '';
+
   if (!questions || questions.length === 0) {
     soalList.innerHTML = `<div class="muted">Belum ada soal (embedded).</div>`;
-    soalPanel.style.display = 'block';
     return;
   }
+
   questions.forEach((q, idx) => {
     const node = document.createElement('div');
     node.className = 'admin-item';
-    const qtext = q.question || q.pertanyaan || '';
+    const qtext = q.question || q.pertanyaan || q.text || '';
     const correct = q.correct || q.kunci || '';
     node.innerHTML = `
       <div>
@@ -511,22 +521,32 @@ function openSoalEmbedded(courseId, materiIndex, title, courseData) {
       if (newQ === null) return;
       const newCorrect = prompt('Edit kunci (embedded):', correct || '') || '';
       try {
-        courseData.materi[materiIndex].questions[idx].question = newQ;
-        courseData.materi[materiIndex].questions[idx].correct = newCorrect;
-        await updateDoc(doc(db, ROOT_COLLECTION, courseId), { materi: courseData.materi });
+        const courseRef = doc(db, ROOT_COLLECTION, courseId);
+        const cSnap = await getDoc(courseRef);
+        if (!cSnap.exists()) { toast('Course not found', 'error'); return; }
+        const cData = cSnap.data() || {};
+        const arr = Array.isArray(cData.materi) ? cData.materi : [];
+        arr[materiIndex].questions[idx].question = newQ;
+        arr[materiIndex].questions[idx].correct = newCorrect;
+        await updateDoc(courseRef, { materi: arr });
         toast('Soal embedded diperbarui', 'success');
-        openMateri(courseId, selectedCourseName);
-        openSoalEmbedded(courseId, materiIndex, title, courseData);
+        openMateri(courseId, selectedCourseData?.name || '');
+        openSoalEmbedded(courseId, materiIndex, title, cData);
       } catch(e){ console.error(e); toast('Gagal update soal embedded', 'error'); }
     });
     node.querySelector('[data-del]')?.addEventListener('click', async () => {
       if (!confirm('Hapus soal embedded ini?')) return;
       try {
-        courseData.materi[materiIndex].questions.splice(idx, 1);
-        await updateDoc(doc(db, ROOT_COLLECTION, courseId), { materi: courseData.materi });
+        const courseRef = doc(db, ROOT_COLLECTION, courseId);
+        const cSnap = await getDoc(courseRef);
+        if (!cSnap.exists()) { toast('Course not found', 'error'); return; }
+        const cData = cSnap.data() || {};
+        const arr = Array.isArray(cData.materi) ? cData.materi : [];
+        arr[materiIndex].questions.splice(idx, 1);
+        await updateDoc(courseRef, { materi: arr });
         toast('Soal embedded dihapus', 'success');
-        openMateri(courseId, selectedCourseName);
-        openSoalEmbedded(courseId, materiIndex, title, courseData);
+        openMateri(courseId, selectedCourseData?.name || '');
+        openSoalEmbedded(courseId, materiIndex, title, cData);
       } catch(e){ console.error(e); toast('Gagal hapus soal embedded', 'error'); }
     });
 
@@ -534,45 +554,33 @@ function openSoalEmbedded(courseId, materiIndex, title, courseData) {
   });
 }
 
-/* Add soal (will try to add to top-level soal collection referencing materiId) */
+// add soal (will try add top-level soal referencing materi id, or fallback to embedded)
 addSoalBtn?.addEventListener('click', async () => {
   try {
     if (!selectedMateriId) return toast('Pilih materi terlebih dahulu', 'error');
     const teks = prompt('Teks soal:');
     if (!teks) return;
     const correct = prompt('Jawaban benar (A/B/C/D atau teks):') || '';
-    const wantOptions = confirm('Apakah soal memiliki pilihan (A/B/C/D)? Tekan OK jika ya.');
-    let options = null;
-    if (wantOptions) {
-      const A = prompt('Opsi A:') || '';
-      const B = prompt('Opsi B:') || '';
-      const C = prompt('Opsi C:') || '';
-      const D = prompt('Opsi D:') || '';
-      options = { A, B, C, D };
-    }
-    // If selectedMateriId is numeric string -> this might be embedded index; try to find course containing it
-    // Attempt to find materi doc first
-    let created = false;
+
+    // attempt to find materia doc under subcollection
     try {
       const mDocRef = doc(db, ROOT_COLLECTION, selectedCourseId, 'materi', String(selectedMateriId));
-      const mDocSnap = await getDoc(mDocRef);
-      if (mDocSnap.exists()) {
+      const mSnap = await getDoc(mDocRef);
+      if (mSnap.exists()) {
         // create top-level soal referencing materi doc id
         await addDoc(collection(db, 'soal'), {
           materiId: String(selectedMateriId),
           question: teks,
-          options: options || {},
           correct,
           createdAt: Date.now()
         });
-        created = true;
-        toast('Soal ditambahkan', 'success');
-        openSoal(String(selectedMateriId), soalMateriTitle?.textContent.replace('Soal — ', '') || '');
+        toast('Soal ditambahkan (top-level)', 'success');
+        openSoal(String(selectedMateriId), selectedMateriTitle);
         return;
       }
     } catch(_) { /* ignore */ }
 
-    // Fallback: selectedMateriId may be embedded index -> find course doc and update embedded array
+    // fallback: embedded -> find course and update array
     try {
       const courseRef = doc(db, ROOT_COLLECTION, selectedCourseId);
       const cSnap = await getDoc(courseRef);
@@ -582,32 +590,29 @@ addSoalBtn?.addEventListener('click', async () => {
         const idx = Number(selectedMateriId);
         if (!Number.isNaN(idx) && arr[idx]) {
           arr[idx].questions = arr[idx].questions || [];
-          arr[idx].questions.push({ question: teks, options: options || {}, correct, explanation: '', id: 'q-' + Date.now() });
+          arr[idx].questions.push({ question: teks, correct, options: {}, id: 'q-'+Date.now() });
           await updateDoc(courseRef, { materi: arr });
-          created = true;
           toast('Soal embedded ditambahkan', 'success');
-          openMateri(selectedCourseId, selectedCourseName);
+          openMateri(selectedCourseId, selectedCourseData?.name || '');
           return;
         }
       }
     } catch(e){ console.error(e); }
 
-    if (!created) {
-      // If we couldn't find materi doc, still create soal referencing selectedMateriId (best-effort)
-      await addDoc(collection(db, 'soal'), {
-        materiId: String(selectedMateriId),
-        question: teks,
-        options: options || {},
-        correct,
-        createdAt: Date.now()
-      });
-      toast('Soal ditambahkan (referensi dibuat)', 'success');
-      openSoal(String(selectedMateriId), soalMateriTitle?.textContent.replace('Soal — ', '') || '');
-    }
+    // final fallback: create top-level soal referencing selectedMateriId anyway
+    await addDoc(collection(db, 'soal'), {
+      materiId: String(selectedMateriId),
+      question: teks,
+      correct,
+      createdAt: Date.now()
+    });
+    toast('Soal ditambahkan (referensi dibuat)', 'success');
+    openSoal(String(selectedMateriId), selectedMateriTitle);
+
   } catch(e){ console.error(e); toast('Gagal tambah soal', 'error'); }
 });
 
-/* ---------- AUTH (no role check) ---------- */
+// ---------- AUTH (login/logout) ----------
 if (loginForm) {
   loginForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -616,7 +621,7 @@ if (loginForm) {
     if (!email || !pass) { toast('Email & password wajib diisi', 'error'); return; }
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      // onAuthStateChanged will handle UI
+      // onAuthStateChanged will handle showing admin UI
     } catch (err) {
       console.error('login error', err);
       toast('Gagal login: ' + (err.message || err.code), 'error');
@@ -633,26 +638,27 @@ if (btnLogout) {
   });
 }
 
-/* ---------- Auth state watcher (no role check) ---------- */
+// ---------- Auth watcher ----------
 onAuthStateChanged(auth, async (user) => {
-  wireThemeControls();
-  applyThemeFromStorage();
   if (!user) {
     showLoginOnly();
     return;
   }
-  // logged in -> show admin UI
   showAdminUI(user);
-  // determine root collection then load
   await determineRootCollection();
-  loadCourses();
+  await loadCourses();
 });
 
-/* ---------- Boot ---------- */
+// ---------- initial boot ----------
 document.addEventListener('DOMContentLoaded', () => {
-  // initial UI state
+  // initial UI: show login box by default (until auth state resolved)
   hideAllAdminPanels();
+  if (loginBox) loginBox.style.display = 'block';
   if (loginForm) loginForm.style.display = 'block';
-  wireThemeControls();
-  applyThemeFromStorage();
+});
+
+// ---------- Optional: refresh button ----------
+btnRefresh?.addEventListener('click', async () => {
+  await determineRootCollection();
+  await loadCourses();
 });
