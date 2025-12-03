@@ -1,10 +1,10 @@
-// app.js (FINAL REVISI) — Robust, UX-friendly, custom result layout
+// admin.js
+// Full single-file Admin panel (WhatsApp-web style) with Firebase Auth + Firestore + local fallback
+// Updated: Added dark mode, toast notifications, ensured "Tambah Course" visibility
 
-// ---------- FIREBASE IMPORTS (CDN) ----------
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-
-// ---------- CONFIG (same as admin) ----------
+// -------------------------------
+// CONFIG: Ganti dengan config Firebase-mu jika perlu
+// -------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -13,530 +13,842 @@ const firebaseConfig = {
   messagingSenderId: "177544522930",
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
+
+// -------------------------------
+// Imports (via Firebase CDN modular)
+// -------------------------------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  Timestamp
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+// -------------------------------
+// Initialize Firebase
+// -------------------------------
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ---------- Small helpers (DOM) ----------
-const $ = id => document.getElementById(id);
-const qsa = s => Array.from(document.querySelectorAll(s));
-const escapeHtml = s => String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;'})[c]);
+// -------------------------------
+// Local fallback keys & defaults
+// -------------------------------
+const STORAGE_KEY = "quizData_v1";
+const DEFAULT_DATA = {
+  courses: [
+    {
+      id: "local-1",
+      name: "Sample Course (Local)",
+      description: "Contoh course yang disimpan lokal",
+      questions: [
+        {
+          id: "q-1",
+          question: "Apa kepanjangan CPU?",
+          options: { A: "Central Processing Unit", B: "Control Process Unit", C: "Central Procedural Unit", D: "Computer Power Unit" },
+          correct: "A",
+          explanation: "CPU adalah unit pemrosesan utama."
+        }
+      ]
+    }
+  ]
+};
 
-// ---------- Inject choice styles (ensures visual feedback even if CSS missing) ----------
-function injectChoiceStyles() {
-  if (document.getElementById('injected-choice-styles')) return;
+// -------------------------------
+// Utilities
+// -------------------------------
+function uidPrefix() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function makeId(prefix = '') { return prefix + uidPrefix(); }
+function escapeHTML(s) {
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+function qs(sel, root = document) { return root.querySelector(sel); }
+function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
+
+// -------------------------------
+// Local storage helpers
+// -------------------------------
+function readLocalData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  try { return JSON.parse(raw); } catch (e) { console.warn("Invalid local storage, reset"); localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DATA)); return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+}
+function writeLocalData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+
+// -------------------------------
+// Firestore wrappers with fallback
+// -------------------------------
+async function getAllCourses() {
+  try {
+    const snap = await getDocs(collection(db, "courses"));
+    const list = [];
+    snap.forEach(d => list.push({ id: d.id, ...(d.data()) }));
+    if (list.length === 0) {
+      // fallback to local
+      const local = readLocalData();
+      return local.courses || [];
+    }
+    return list.map(normalizeCourseFromFirestore);
+  } catch (err) {
+    console.warn("Firestore getAllCourses failed, fallback to local", err);
+    const local = readLocalData();
+    return local.courses || [];
+  }
+}
+
+function normalizeCourseFromFirestore(d) {
+  return {
+    id: d.id || d.id,
+    name: d.name || d.name,
+    description: d.description || d.description || '',
+    questions: Array.isArray(d.questions) ? d.questions.map(normalizeQuestionFromFirestore) : (d.questions || [])
+  };
+}
+function normalizeQuestionFromFirestore(q) {
+  return {
+    id: q.id || makeId('q-'),
+    question: q.question || q.text || q.pertanyaan || '',
+    options: q.options || q.choices || { A: q.opsi_a, B: q.opsi_b, C: q.opsi_c, D: q.opsi_d } || {},
+    correct: (q.correct || q.answer || q.jawaban || '').toUpperCase() || 'A',
+    explanation: q.explanation || q.explain || q.penjelasan || ''
+  };
+}
+
+async function saveCourseToFirestore(course) {
+  try {
+    const payload = {
+      name: course.name,
+      description: course.description || '',
+      questions: course.questions || [],
+      createdAt: Timestamp.now()
+    };
+    const ref = await addDoc(collection(db, "courses"), payload);
+    return { success: true, id: ref.id };
+  } catch (err) {
+    console.error("saveCourseToFirestore error", err);
+    const data = readLocalData();
+    data.courses.push(course);
+    writeLocalData(data);
+    return { success: false, id: course.id };
+  }
+}
+
+async function updateCourseInFirestore(id, updates) {
+  try {
+    await updateDoc(doc(db, "courses", id), updates);
+    return { success: true };
+  } catch (err) {
+    console.warn("updateCourseInFirestore failed", err);
+    const data = readLocalData();
+    const c = data.courses.find(x => x.id === id);
+    if (c) Object.assign(c, updates);
+    writeLocalData(data);
+    return { success: false };
+  }
+}
+
+async function deleteCourseFromFirestore(id) {
+  try {
+    await deleteDoc(doc(db, "courses", id));
+    return { success: true };
+  } catch (err) {
+    console.warn("deleteCourseFromFirestore failed", err);
+    const data = readLocalData();
+    data.courses = data.courses.filter(x => x.id !== id);
+    writeLocalData(data);
+    return { success: false };
+  }
+}
+
+async function addQuestionToCourse(courseId, question) {
+  try {
+    const ref = doc(db, "courses", courseId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error("Course not found in Firestore");
+    const data = snap.data();
+    const qs = Array.isArray(data.questions) ? data.questions : [];
+    qs.push(question);
+    await updateDoc(ref, { questions: qs });
+    return { success: true };
+  } catch (err) {
+    console.warn("addQuestionToCourse Firestore failed", err);
+    const local = readLocalData();
+    const c = local.courses.find(x => x.id === courseId);
+    if (c) {
+      c.questions = c.questions || [];
+      c.questions.push(question);
+      writeLocalData(local);
+      return { success: false };
+    }
+    return { success: false };
+  }
+}
+
+async function updateQuestionInCourse(courseId, questionId, updated) {
+  try {
+    const ref = doc(db, "courses", courseId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error("Course not found");
+    const data = snap.data();
+    const qs = Array.isArray(data.questions) ? data.questions : [];
+    const idx = qs.findIndex(q => (q.id || q.qid) === questionId);
+    if (idx === -1) throw new Error("Question not found");
+    qs[idx] = { ...qs[idx], ...updated };
+    await updateDoc(ref, { questions: qs });
+    return { success: true };
+  } catch (err) {
+    console.warn("updateQuestionInCourse failed", err);
+    const local = readLocalData();
+    const c = local.courses.find(x => x.id === courseId);
+    if (c) {
+      const qidx = (c.questions || []).findIndex(q => q.id === questionId);
+      if (qidx !== -1) {
+        c.questions[qidx] = { ...c.questions[qidx], ...updated };
+        writeLocalData(local);
+        return { success: false };
+      }
+    }
+    return { success: false };
+  }
+}
+
+async function deleteQuestionFromCourse(courseId, questionId) {
+  try {
+    const ref = doc(db, "courses", courseId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error("Course not found");
+    const data = snap.data();
+    const qs = Array.isArray(data.questions) ? data.questions : [];
+    const newQs = qs.filter(q => (q.id || q.qid) !== questionId);
+    await updateDoc(ref, { questions: newQs });
+    return { success: true };
+  } catch (err) {
+    console.warn("deleteQuestionFromCourse failed", err);
+    const local = readLocalData();
+    const c = local.courses.find(x => x.id === courseId);
+    if (c) {
+      c.questions = (c.questions || []).filter(q => q.id !== questionId);
+      writeLocalData(local);
+      return { success: false };
+    }
+    return { success: false };
+  }
+}
+
+async function getAllParticipants() {
+  try {
+    const snap = await getDocs(collection(db, "peserta"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn("getAllParticipants failed, fallback to empty", err);
+    return [];
+  }
+}
+
+async function addParticipant(payload) {
+  try {
+    const ref = await addDoc(collection(db, "peserta"), { ...payload, createdAt: Timestamp.now() });
+    return { success: true, id: ref.id };
+  } catch (err) {
+    console.warn("addParticipant failed", err);
+    return { success: false };
+  }
+}
+
+async function getAllScores() {
+  try {
+    const snap = await getDocs(collection(db, "scores"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn("getAllScores failed", err);
+    return [];
+  }
+}
+
+async function addScore(payload) {
+  try {
+    const ref = await addDoc(collection(db, "scores"), { ...payload, createdAt: Timestamp.now() });
+    return { success: true, id: ref.id };
+  } catch (err) {
+    console.warn("addScore failed", err);
+    return { success: false };
+  }
+}
+
+async function isUserAdminByUid(uid) {
+  if (!uid) return false;
+  try {
+    const ref = doc(db, "admins", uid);
+    const snap = await getDoc(ref);
+    return snap.exists();
+  } catch (err) {
+    console.warn("isUserAdminByUid error", err);
+    return false;
+  }
+}
+
+// -------------------------------
+// Toast Notification System (Simple)
+// -------------------------------
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `wa-toast ${type}`;
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed; top: 20px; right: 20px; z-index: 10000;
+    background: ${type === 'success' ? '#25D366' : type === 'error' ? '#FF6B6B' : '#007bff'};
+    color: white; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    font-size: 14px; max-width: 300px; word-wrap: break-word;
+    animation: slideIn 0.3s ease-out;
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease-in'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// Add toast styles
+if (!document.getElementById('toast-styles')) {
   const style = document.createElement('style');
-  style.id = 'injected-choice-styles';
+  style.id = 'toast-styles';
   style.textContent = `
-    .choice.chosen { background: var(--accent, #00A884); color: #fff; border-color: var(--accent, #00A884); transform: none; }
-    .choice.final-correct { background: rgba(16,185,129,0.12); border-color: #10b981; color: inherit; box-shadow: 0 2px 8px rgba(16,185,129,0.08); }
-    .choice.final-wrong { background: rgba(239,68,68,0.08); border-color: #ef4444; color: inherit; opacity: 1; }
-    .result-summary { display:flex;gap:12px;align-items:center;flex-wrap:wrap }
-    .result-score { font-size:28px;font-weight:700 }
-    .progress-bar { width:180px;height:10px;border-radius:999px; background:rgba(0,0,0,0.06); overflow:hidden }
-    .progress-bar > i { display:block;height:100%;background:var(--accent,#00A884); width:0% }
-    .result-breakdown { margin-top:12px; display:flex;flex-direction:column; gap:8px; max-height:300px; overflow:auto; padding-right:6px }
-    .result-item { padding:10px;border-radius:8px;background:var(--card); border:1px solid var(--glass); }
-    .result-item .meta { font-size:13px;color:var(--muted) }
-    @media (max-width:720px) { .result-summary { flex-direction:column; align-items:flex-start } }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
   `;
   document.head.appendChild(style);
 }
 
-// ---------- State ----------
-let COURSES = []; // loaded courses (with materi normalized)
-let CURRENT_COURSE = null; // course object
-let CURRENT_MATERI = null; // materi object
-let CURRENT_QUESTIONS = []; // array of questions for current quiz
-let USER_ANSWERS = {}; // index -> "A"
-
-// ---------- Load & normalize courses ----------
-async function loadCoursesRaw() {
-  try {
-    const snap = await getDocs(collection(db, "courses"));
-    const list = [];
-    snap.forEach(d => {
-      const data = d.data() || {};
-      // normalize to materi[]
-      if (!Array.isArray(data.materi)) {
-        if (Array.isArray(data.questions)) {
-          data.materi = [{ id: 'm-imported', title: 'Imported', description: '', questions: data.questions }];
-          delete data.questions;
-        } else data.materi = [];
-      } else {
-        data.materi = data.materi.map(m => ({
-          id: m.id || ('m-'+Math.random().toString(36).slice(2,8)),
-          title: m.title || 'Untitled',
-          description: m.description || '',
-          questions: Array.isArray(m.questions) ? m.questions : []
-        }));
-      }
-      list.push({ id: d.id, ...data });
-    });
-    return list;
-  } catch (err) {
-    console.warn('loadCoursesRaw error', err);
-    return [];
+// -------------------------------
+// Dark Mode Toggle
+// -------------------------------
+let isDarkMode = localStorage.getItem('darkMode') === 'true';
+function toggleDarkMode() {
+  isDarkMode = !isDarkMode;
+  localStorage.setItem('darkMode', isDarkMode);
+  applyDarkMode();
+}
+function applyDarkMode() {
+  const root = document.documentElement;
+  if (isDarkMode) {
+    root.style.setProperty('--wa-bg', '#111b21');
+    root.style.setProperty('--wa-dark', '#f0f2f5');
+    root.style.setProperty('--wa-card', '#1f2937');
+    root.style.setProperty('--wa-muted', '#9ca3af');
+    root.style.setProperty('--wa-accent', '#25D366');
+    root.style.setProperty('--wa-accent-2', '#075E54');
+  } else {
+    root.style.setProperty('--wa-bg', '#f0f2f5');
+    root.style.setProperty('--wa-dark', '#111b21');
+    root.style.setProperty('--wa-card', '#0b1416');
+    root.style.setProperty('--wa-muted', '#9aa4a6');
+    root.style.setProperty('--wa-accent', '#075E54');
+    root.style.setProperty('--wa-accent-2', '#25D366');
   }
 }
-function sortCourses(list) {
-  return list.sort((a,b)=> (a.name || '').localeCompare(b.name || ''));
-}
-async function loadCourses() {
-  const raw = await loadCoursesRaw();
-  COURSES = sortCourses(raw);
-  return COURSES;
-}
-async function loadCourseById(id) {
-  if (!COURSES || COURSES.length === 0) await loadCourses();
-  return COURSES.find(c=>c.id === id) || null;
-}
 
-// ---------- UI: render Courses (Mata Kuliah) ----------
-async function renderCourses() {
-  await loadCourses();
-  const el = $('coursesList');
-  if(!el) {
-    console.warn('coursesList element not found');
-    return;
-  }
-  el.innerHTML = '';
-  if(COURSES.length === 0) { el.innerHTML = '<div class="muted">Belum ada mata kuliah.</div>'; return; }
-  COURSES.forEach(course => {
-    const div = document.createElement('div'); div.className = 'course-item';
-    const mCount = (Array.isArray(course.materi)?course.materi.length:0);
-    const qCount = (Array.isArray(course.materi)? course.materi.reduce((s,m)=> s + ((Array.isArray(m.questions)?m.questions.length:0)),0) : 0);
-    div.innerHTML = `
-      <div class="left">
-        <div class="course-badge">${escapeHtml((course.name||'?').charAt(0).toUpperCase())}</div>
-        <div><b>${escapeHtml(course.name || 'Tak bernama')}</b><br><span class="muted">${mCount} materi • ${qCount} soal</span></div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn ghost sm view-materi" data-id="${course.id}">Lihat Materi</button>
-      </div>
-    `;
-    el.appendChild(div);
-  });
+// -------------------------------
+// UI: build WhatsApp-like Admin UI into existing DOM (or replace)
+// -------------------------------
+function ensureRootStructure() {
+  const existing = document.querySelector('.admin-app-root');
+  if (existing) return existing;
 
-  // attach events
-  qsa('.view-materi').forEach(b => b.addEventListener('click', async (ev) => {
-    const courseId = ev.currentTarget.dataset.id;
-    const c = await loadCourseById(courseId);
-    if(!c) return alert('Course not found');
-    CURRENT_COURSE = c;
-    // If materiSection exists => render it. Else show modal fallback
-    if ($('materiSection')) {
-      renderMateriList(c);
-      showOnlySection('materiSection');
-    } else {
-      // modal fallback
-      openMateriModal(c);
-    }
-  }));
+  document.body.innerHTML = '';
+  document.body.classList.add('admin-app-root', 'whatsapp-admin');
+
+  const app = document.createElement('div');
+  app.className = 'app admin-app-root';
+  app.innerHTML = `
+    <aside class="wa-sidebar" aria-hidden="false"></aside>
+    <main class="wa-main"></main>
+  `;
+  document.body.appendChild(app);
+
+  injectAdminStyles();
+  applyDarkMode(); // Apply initial dark mode
+  return app;
 }
 
-// ---------- UI: render Materi list for a course ----------
-function renderMateriList(course) {
-  const el = $('materiList');
-  if(!el) {
-    console.warn('materiList element not found');
-    return;
-  }
-  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><h3 style="margin:0">${escapeHtml(course.name)}</h3><div class="muted">${escapeHtml(course.description||'')}</div></div><div><button id="backToCourses" class="btn ghost sm">Kembali</button></div></div><div id="materi_cards"></div>`;
-  const cards = $('materi_cards');
-  const arr = Array.isArray(course.materi) ? course.materi : [];
-  if(arr.length === 0) { cards.innerHTML = '<div class="muted">Belum ada materi.</div>'; return; }
-  arr.forEach((m, idx) => {
-    const cdiv = document.createElement('div'); cdiv.className = 'course-item';
-    cdiv.innerHTML = `<div style="display:flex;gap:12px;align-items:center"><div class="badge">${(m.title||'M')[0].toUpperCase()}</div><div><div style="font-weight:600">${escapeHtml(m.title)}</div><div class="muted">${escapeHtml(m.description||'')}</div></div></div><div style="display:flex;gap:8px"><button class="btn sm start-materi" data-course="${course.id}" data-i="${idx}">Mulai</button><button class="btn ghost sm view-q" data-course="${course.id}" data-i="${idx}">Lihat Soal</button></div>`;
-    cards.appendChild(cdiv);
-  });
-
-  // events (safe attach)
-  const backBtn = $('backToCourses');
-  if (backBtn) backBtn.onclick = () => { showOnlySection('coursesSection'); renderCourses(); };
-
-  qsa('.start-materi').forEach(b => b.addEventListener('click', (ev) => {
-    const courseId = ev.currentTarget.dataset.course;
-    const i = parseInt(ev.currentTarget.dataset.i,10);
-    startQuizFromMateri(courseId, i);
-  }));
-  qsa('.view-q').forEach(b => b.addEventListener('click', (ev) => {
-    const courseId = ev.currentTarget.dataset.course;
-    const i = parseInt(ev.currentTarget.dataset.i,10);
-    openMateriPreview(courseId, i);
-  }));
+function injectAdminStyles() {
+  if (document.getElementById('wa-admin-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'wa-admin-styles';
+  style.textContent = `
+    :root{ --wa-bg:#f0f2f5; --wa-dark:#111b21; --wa-accent:#075E54; --wa-accent-2:#25D366; --wa-card:#0b1416; --wa-muted:#9aa4a6; --wa-radius:12px; }
+    body.whatsapp-admin { margin:0; font-family:Inter,system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica
+    body.whatsapp-admin {
+  margin:0;
+  overflow:hidden;
+  background:var(--wa-bg);
+  color:var(--wa-dark);
+  height:100vh;
+  display:flex;
+  font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 }
 
-// ---------- Modal fallback when materiSection missing ----------
-function openMateriModal(course) {
-  const modalId = 'materi_modal';
-  if (document.getElementById(modalId)) return;
-  const wrapper = document.createElement('div');
-  wrapper.id = modalId;
-  wrapper.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:9999;padding:16px';
-  const content = document.createElement('div');
-  content.style = 'max-width:720px;width:100%;background:var(--card,white);padding:16px;border-radius:10px;max-height:80vh;overflow:auto';
-  content.innerHTML = `<h3 style="margin-top:0">${escapeHtml(course.name)}</h3><div class="muted">${escapeHtml(course.description||'')}</div><hr/><div id="modal_materi_list"></div><div style="text-align:right;margin-top:12px"><button id="close_materi_modal" class="btn ghost">Tutup</button></div>`;
-  wrapper.appendChild(content);
-  document.body.appendChild(wrapper);
-
-  const list = document.getElementById('modal_materi_list');
-  const arr = Array.isArray(course.materi) ? course.materi : [];
-  if (arr.length === 0) list.innerHTML = '<div class="muted">Belum ada materi.</div>';
-  else arr.forEach((m, i) => {
-    const r = document.createElement('div');
-    r.className = 'course-item';
-    r.style.marginBottom = '8px';
-    r.innerHTML = `<div><div style="font-weight:600">${escapeHtml(m.title)}</div><div class="muted">${escapeHtml(m.description||'')}</div></div><div style="display:flex;gap:8px"><button class="btn sm modal_start" data-course="${course.id}" data-i="${i}">Mulai</button> <button class="btn ghost sm modal_view" data-course="${course.id}" data-i="${i}">Lihat Soal</button></div>`;
-    list.appendChild(r);
-  });
-
-  list.querySelectorAll('.modal_start').forEach(b => b.onclick = (ev) => {
-    const courseId = ev.currentTarget.dataset.course;
-    const i = parseInt(ev.currentTarget.dataset.i,10);
-    document.getElementById(modalId)?.remove();
-    startQuizFromMateri(courseId, i);
-  });
-  list.querySelectorAll('.modal_view').forEach(b => b.onclick = (ev) => {
-    const courseId = ev.currentTarget.dataset.course;
-    const i = parseInt(ev.currentTarget.dataset.i,10);
-    openMateriPreview(courseId, i);
-  });
-  document.getElementById('close_materi_modal').onclick = () => document.getElementById(modalId)?.remove();
+/* SIDEBAR */
+.wa-sidebar {
+  width: 330px;
+  background: var(--wa-card);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  display:flex;
+  flex-direction:column;
+  height:100%;
+  overflow:auto;
 }
 
-// ---------- Open Materi preview (simple modal) ----------
-function openMateriPreview(courseId, index) {
-  const c = COURSES.find(x=>x.id===courseId);
-  if(!c) return;
-  const m = c.materi && c.materi[index];
-  if(!m) return;
-  const wrap = document.createElement('div');
-  wrap.id = 'preview_modal';
-  wrap.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:9999;padding:16px';
-  const box = document.createElement('div');
-  box.style = 'max-width:720px;width:100%;background:var(--card,white);padding:16px;border-radius:10px;max-height:80vh;overflow:auto';
-  box.innerHTML = `<h3 style="margin-top:0">${escapeHtml(m.title)}</h3><div class="muted">${escapeHtml(m.description||'')}</div><hr/><div>${(m.questions||[]).map((q,i)=>`<div style="margin-bottom:8px"><b>${i+1}.</b> ${escapeHtml(q.question)}</div>`).join('')}</div><div style="text-align:right;margin-top:12px"><button id="closePreview" class="btn ghost">Tutup</button></div>`;
-  wrap.appendChild(box);
-  document.body.appendChild(wrap);
-  const closer = document.getElementById('closePreview');
-  if (closer) closer.onclick = () => document.getElementById('preview_modal')?.remove();
+.wa-sidebar-header {
+  padding:16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:var(--wa-card);
+  border-bottom:1px solid rgba(255,255,255,0.1);
+}
+.wa-sidebar-header h2 { margin:0; font-size:18px; }
+
+/* SIDEBAR LIST */
+.wa-list {
+  padding:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
 }
 
-// ---------- Start Quiz from specific materi ----------
-async function startQuizFromMateri(courseId, materiIndex) {
-  const c = await loadCourseById(courseId);
-  if(!c) return alert('Course not found');
-  const m = (c.materi || [])[materiIndex];
-  if(!m) return alert('Materi not found');
-  CURRENT_COURSE = c;
-  CURRENT_MATERI = m;
-  CURRENT_QUESTIONS = Array.isArray(m.questions) ? JSON.parse(JSON.stringify(m.questions)) : [];
-  USER_ANSWERS = {};
-  CURRENT_QUESTIONS = shuffleArray(CURRENT_QUESTIONS);
-  renderQuizFromCurrent();
-  showOnlySection('quizSection');
+.wa-item {
+  padding:14px;
+  background:rgba(255,255,255,0.03);
+  border-radius:var(--wa-radius);
+  cursor:pointer;
+  transition:0.2s;
+}
+.wa-item:hover { background:rgba(255,255,255,0.08); }
+.wa-item.active { background:rgba(37,211,102,0.18); }
+
+/* MAIN PANEL */
+.wa-main {
+  flex:1;
+  background:var(--wa-bg);
+  height:100%;
+  overflow-y:auto;
+  padding:20px;
 }
 
-// ---------- quiz rendering ----------
-function renderQuizFromCurrent() {
-  injectChoiceStyles();
-  const titleEl = $('quizTitle');
-  const container = $('quizContainer');
-  if (titleEl) titleEl.textContent = `${escapeHtml(CURRENT_COURSE.name)} / ${escapeHtml(CURRENT_MATERI.title)}`;
-  if (!container) {
-    console.warn('quizContainer element not found');
-    return;
-  }
-  container.innerHTML = '';
-  CURRENT_QUESTIONS.forEach((q, idx) => {
-    const card = document.createElement('div'); card.className = 'question-card'; card.id = `qcard-${idx}`;
-    // Ensure option existence
-    const opts = ['A','B','C','D'].map(opt => ({ opt, txt: q.options?.[opt] || '' }));
-    card.innerHTML = `<div class="q-text"><b>${idx+1}.</b> ${escapeHtml(q.question)}</div>
-      <div class="choices" id="choices-${idx}">
-        ${opts.map(o=>`<div class="choice" data-opt="${o.opt}" data-idx="${idx}"><span class="label">${o.opt}.</span> <span class="text">${escapeHtml(o.txt)}</span></div>`).join('')}
-      </div>
-      <div class="explanation muted" id="exp-${idx}" style="display:none;margin-top:8px">${escapeHtml(q.explanation||'Tidak ada penjelasan')}</div>`;
-    container.appendChild(card);
-  });
-  attachChoiceEventsApp();
-  renderQuizHeaderApp();
-  updateProgressApp();
-  // wire legacy finish button if present
-  const legacyFinish = $('finishQuizBtn');
-  if (legacyFinish) {
-    legacyFinish.onclick = finishQuizApp;
-  }
-  // wire legacy backToCourses if present
-  const legacyBack = $('backToCourses');
-  if (legacyBack) legacyBack.onclick = () => { showOnlySection('coursesSection'); renderCourses(); };
+.wa-card {
+  background:var(--wa-card);
+  padding:20px;
+  border-radius:var(--wa-radius);
+  box-shadow:0 4px 14px rgba(0,0,0,0.25);
+  border:1px solid rgba(255,255,255,0.05);
+  margin-bottom:20px;
 }
 
-function attachChoiceEventsApp() {
-  qsa('.choice').forEach(c => {
-    c.onclick = null;
-    c.addEventListener('click', (ev) => {
-      const el = ev.currentTarget;
-      const idx = parseInt(el.dataset.idx,10);
-      const opt = el.dataset.opt;
-      // allow change until finished
-      USER_ANSWERS[idx] = opt;
-      // visual: remove chosen on siblings and add chosen on clicked
-      qsa(`#choices-${idx} .choice`).forEach(x=>{
-        x.classList.remove('chosen');
-      });
-      el.classList.add('chosen');
-      updateProgressApp();
-    });
-  });
+/* FORMS */
+.wa-input, .wa-textarea, .wa-select {
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.08);
+  background:transparent;
+  color:var(--wa-dark);
+  margin-bottom:12px;
+}
+.wa-textarea { min-height:100px; }
+
+.wa-btn {
+  padding:10px 18px;
+  background:var(--wa-accent);
+  color:#fff;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  transition:0.2s;
+}
+.wa-btn:hover { opacity:0.9; }
+
+.wa-btn-danger {
+  background:#ff4c4c;
 }
 
-function renderQuizHeaderApp() {
-  const header = $('quizHeader');
-  if(!header) return;
-  const total = CURRENT_QUESTIONS.length;
-  header.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600">${escapeHtml(CURRENT_MATERI.title)} — ${total} soal</div><div><button id="btnFinish" class="btn primary">Selesai</button></div></div>`;
-  const btn = $('btnFinish');
-  if (btn) btn.onclick = finishQuizApp;
+/* QUESTIONS INSIDE MAIN */
+.q-box {
+  padding:14px;
+  border-radius:10px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  margin-bottom:12px;
 }
 
-function updateProgressApp() {
-  const total = CURRENT_QUESTIONS.length;
-  const answered = Object.keys(USER_ANSWERS).length;
-  const prog = $('quizProgress');
-  if(prog) prog.textContent = `${answered} / ${total} terjawab`;
+.q-option { color:var(--wa-muted); }
+
+/* Toggle switch */
+.dark-toggle {
+  cursor:pointer;
+  font-size:20px;
+  padding:4px;
 }
 
-// ---------- Finish quiz: mark & show custom result layout ----------
-function finishQuizApp() {
-  // mark correct/wrong, show score and explanation
-  let score = 0;
-  CURRENT_QUESTIONS.forEach((q, i) => {
-    const user = USER_ANSWERS[i];
-    const correct = q.correct;
-    qsa(`#choices-${i} .choice`).forEach(c => {
-      // reset states
-      c.classList.remove('final-correct','final-wrong');
-      c.classList.remove('chosen'); // remove chosen if present; we'll re-add if user's choice
-      // mark correct / wrong
-      if (c.dataset.opt === correct) c.classList.add('final-correct');
-      if (user && c.dataset.opt === user && user !== correct) c.classList.add('final-wrong');
-      // if user selected and it's correct, visually show chosen + correct style
-      if (user && c.dataset.opt === user && user === correct) {
-        c.classList.add('final-correct');
-      }
-    });
-    const exp = $('exp-'+i);
-    if(exp) exp.style.display = 'block';
-    if(user === correct) score++;
-  });
-  const total = CURRENT_QUESTIONS.length;
+/* Scrollbar styling */
+::-webkit-scrollbar { width:8px; }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:6px; }
 
-  // build custom result layout
-  const resultHtml = buildCustomResultHtml(score, total);
-  // prefer a dedicated resultSection element (recommended)
-  const resultSection = $('resultSection');
-  if (resultSection) {
-    resultSection.innerHTML = resultHtml;
-    // wire result actions
-    wireResultActions(score, total);
-    showOnlySection('resultSection');
-    resultSection.scrollIntoView({behavior:'smooth'});
-    return;
-  }
-
-  // fallback to inline resultBox in quiz page
-  const resultBox = $('resultBox');
-  if (resultBox) {
-    resultBox.innerHTML = resultHtml;
-    wireResultActions(score, total);
-    resultBox.scrollIntoView({behavior:'smooth'});
-    return;
-  }
-
-  // fallback modal
-  showResultModal(resultHtml, score, total);
+/* END STYLE */
+`;
+  document.head.appendChild(style);
 }
 
-function buildCustomResultHtml(score, total) {
-  const percent = total ? Math.round((score/total)*100) : 0;
-  const breakdownItems = CURRENT_QUESTIONS.map((q, i) => {
-    const user = USER_ANSWERS[i] || null;
-    const correct = q.correct;
-    const isCorrect = user === correct;
-    const choicesHtml = ['A','B','C','D'].map(k=>{
-      const txt = escapeHtml(q.options?.[k] || '');
-      const marker = (k === correct) ? '✔' : (user === k && !isCorrect ? '✕' : '');
-      const cls = (k === correct) ? 'final-correct' : (user === k && !isCorrect ? 'final-wrong' : '');
-      return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div style="flex:1"><small style="font-weight:600">${k}.</small> ${txt}</div><div style="min-width:36px;text-align:right" class="${cls}" aria-hidden="true">${marker}</div></div>`;
-    }).join('');
-    return `
-      <div class="result-item">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><b>${i+1}.</b> ${escapeHtml(q.question)}</div>
-          <div class="meta">${isCorrect ? '<span style="color:var(--accent)">Benar</span>' : '<span style="color:var(--danger)">Salah</span>'}</div>
-        </div>
-        <div style="margin-top:8px">${choicesHtml}</div>
-        <div style="margin-top:8px" class="meta">Jawaban Anda: ${user || '-'} • Kunci: ${correct}</div>
-        <div class="explanation" style="margin-top:8px">${escapeHtml(q.explanation||'Tidak ada penjelasan')}</div>
-      </div>
-    `;
-  }).join('');
+applyDarkMode();
 
-  // summary and progress bar
-  const html = `
-    <div class="card">
-      <div class="result-summary">
-        <div>
-          <div class="result-score">${score} / ${total}</div>
-          <div class="muted">${percent}%</div>
-        </div>
-        <div class="progress-bar" aria-hidden="true"><i style="width:${percent}%;"></i></div>
-        <div style="margin-left:auto;text-align:right">
-          <div class="muted">Benar: ${score}</div>
-          <div class="muted">Salah: ${total - score}</div>
-        </div>
-      </div>
+/* ============================
+   RENDER UI
+============================ */
+function renderUI() {
+  const app = ensureRootStructure();
 
-      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-        <button id="resultBackToMateri" class="btn ghost">Kembali</button>
-        <button id="resultRetry" class="btn">Ulangi</button>
-        <button id="resultDownload" class="btn">Download JSON</button>
-      </div>
+  const sidebar = qs('.wa-sidebar');
+  const main = qs('.wa-main');
 
-      <div class="result-breakdown" style="margin-top:12px">${breakdownItems}</div>
+  sidebar.innerHTML = `
+    <div class="wa-sidebar-header">
+      <h2>Admin</h2>
+      <div class="dark-toggle" id="toggleDark">🌓</div>
+    </div>
+
+    <div class="wa-list" id="courseList"></div>
+
+    <div style="padding:12px;">
+      <button class="wa-btn" id="addCourseBtn">＋ Tambah Course</button>
+    </div>
+
+    <div style="padding:12px;">
+      <button class="wa-btn" id="logoutBtn">Logout</button>
     </div>
   `;
-  return html;
+
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>Selamat datang Admin</h2>
+      <p>Pilih course di kiri untuk mengelola soal.</p>
+    </div>
+  `;
+
+  qs('#toggleDark').onclick = toggleDarkMode;
+  qs('#logoutBtn').onclick = () => signOut(auth);
+  qs('#addCourseBtn').onclick = () => renderAddCourseForm();
 }
 
-function wireResultActions(score, total) {
-  const back = $('resultBackToMateri');
-  if (back) back.onclick = () => { showOnlySection('materiSection'); if(CURRENT_COURSE) renderMateriList(CURRENT_COURSE); };
-  const retry = $('resultRetry');
-  if (retry) retry.onclick = () => {
-    // restart same materi
-    startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m => m.id === CURRENT_MATERI.id));
-  };
-  const dl = $('resultDownload');
-  if (dl) dl.onclick = () => {
-    const payload = {
-      courseId: CURRENT_COURSE?.id || null,
-      courseName: CURRENT_COURSE?.name || null,
-      materiId: CURRENT_MATERI?.id || null,
-      materiTitle: CURRENT_MATERI?.title || null,
-      score: score,
-      total: total,
-      percent: total ? Math.round((score/total)*100) : 0,
-      userAnswers: USER_ANSWERS,
-      timestamp: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `quiz-result-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
+/* ============================
+   LOAD COURSES
+============================ */
+async function loadCourses() {
+  const list = qs('#courseList');
+  list.innerHTML = `<div class="wa-item">Loading...</div>`;
+
+  const courses = await getAllCourses();
+
+  list.innerHTML = "";
+  courses.forEach(c => {
+    const div = document.createElement('div');
+    div.className = "wa-item";
+    div.textContent = c.name;
+    div.onclick = () => renderCourseDetail(c);
+    list.appendChild(div);
+  });
 }
 
-function showResultModal(html, score, total) {
-  const id = 'result_modal';
-  if (document.getElementById(id)) document.getElementById(id).remove();
-  const wrap = document.createElement('div');
-  wrap.id = id;
-  wrap.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:99999;padding:16px';
-  const box = document.createElement('div');
-  box.style = 'max-width:860px;width:100%;background:var(--card);padding:16px;border-radius:12px;max-height:88vh;overflow:auto';
-  box.innerHTML = html + `<div style="text-align:right;margin-top:12px"><button id="closeResultModal" class="btn">Tutup</button></div>`;
-  wrap.appendChild(box);
-  document.body.appendChild(wrap);
-  const close = $('closeResultModal');
-  if (close) close.onclick = () => wrap.remove();
-  // wire download & retry inside modal
-  const retry = box.querySelector('#resultRetry');
-  if (retry) retry.onclick = () => {
-    wrap.remove();
-    startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m=>m.id===CURRENT_MATERI.id));
-  };
-  const dl = box.querySelector('#resultDownload');
-  if (dl) dl.onclick = () => {
-    // reuse wireResultActions code: create click programmatically
-    const payload = {
-      courseId: CURRENT_COURSE?.id || null,
-      courseName: CURRENT_COURSE?.name || null,
-      materiId: CURRENT_MATERI?.id || null,
-      materiTitle: CURRENT_MATERI?.title || null,
-      score: score,
-      total: total,
-      userAnswers: USER_ANSWERS,
-      timestamp: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `quiz-result-${Date.now()}.json`;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+/* ============================
+   RENDER: COURSE DETAIL
+============================ */
+function renderCourseDetail(course) {
+  const main = qs('.wa-main');
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>${course.name}</h2>
+      <p>${course.description}</p>
+
+      <button class="wa-btn" id="editCourseBtn">Edit Course</button>
+      <button class="wa-btn wa-btn-danger" id="deleteCourseBtn">Hapus Course</button>
+    </div>
+
+    <div class="wa-card">
+      <h3>Daftar Pertanyaan</h3>
+      <div id="qList"></div>
+      <button class="wa-btn" id="addQBtn">＋ Tambah Pertanyaan</button>
+    </div>
+  `;
+
+  renderQuestions(course);
+
+  qs('#addQBtn').onclick = () => renderAddQuestionForm(course);
+  qs('#editCourseBtn').onclick = () => renderEditCourseForm(course);
+  qs('#deleteCourseBtn').onclick = async () => {
+    if (!confirm("Hapus course ini?")) return;
+    await deleteCourseFromFirestore(course.id);
+    showToast("Course dihapus", "success");
+    loadCourses();
+    qs('.wa-main').innerHTML = `<div class="wa-card"><h2>Pilih course</h2></div>`;
   };
 }
 
-// ---------- small helpers ----------
-function showOnlySection(id) {
-  const known = ['coursesSection','materiSection','quizSection','resultSection'];
-  // if the page uses section tags or not, try multiple approaches
-  known.forEach(i => { const n = $(i); if(!n) return; n.style.display = (i===id) ? 'block' : 'none'; });
-  // also hide any element with data-section attribute for progressive enhancement
-  qsa('[data-section]').forEach(el => { el.style.display = (el.dataset.section === id) ? 'block' : 'none'; });
-}
+/* ============================
+   RENDER QUESTIONS
+============================ */
+function renderQuestions(course) {
+  const qList = qs('#qList');
+  qList.innerHTML = "";
 
-function shuffleArray(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i+1));
-    [a[i], a[j]] = [a[j], a[i]];
+  if (!course.questions || course.questions.length === 0) {
+    qList.innerHTML = `<p class="wa-muted">Belum ada pertanyaan</p>`;
+    return;
   }
-  return a;
+
+  course.questions.forEach(q => {
+    const div = document.createElement('div');
+    div.className = "q-box";
+    div.innerHTML = `
+      <b>${q.question}</b>
+      <div class="q-option">A: ${q.options.A}</div>
+      <div class="q-option">B: ${q.options.B}</div>
+      <div class="q-option">C: ${q.options.C}</div>
+      <div class="q-option">D: ${q.options.D}</div>
+      <p>Jawaban: <b>${q.correct}</b></p>
+
+      <button class="wa-btn" data-id="${q.id}" data-action="edit">Edit</button>
+      <button class="wa-btn wa-btn-danger" data-id="${q.id}" data-action="delete">Hapus</button>
+    `;
+    qList.appendChild(div);
+  });
+
+  qsa('.q-box button').forEach(btn => {
+    btn.onclick = async () => {
+      const qid = btn.dataset.id;
+      const action = btn.dataset.action;
+
+      if (action === "edit") renderEditQuestionForm(course, qid);
+      if (action === "delete") {
+        if (confirm("Hapus pertanyaan?")) {
+          await deleteQuestionFromCourse(course.id, qid);
+          showToast("Pertanyaan dihapus", "success");
+          const updated = await getAllCourses();
+          renderCourseDetail(updated.find(c => c.id === course.id));
+        }
+      }
+    };
+  });
 }
 
-// ---------- Theme: support button or checkbox ----------
-function wireThemeToggle() {
-  const t = $('themeToggle') || $('themeToggleAdmin') || $('themeBtnAdmin');
-  try {
-    const saved = localStorage.getItem('theme') || 'light';
-    document.body.classList.toggle('dark', saved === 'dark');
-    if (!t) return;
-    if (t.tagName.toLowerCase() === 'input' && t.type === 'checkbox') {
-      t.checked = saved === 'dark';
-      t.addEventListener('change', () => {
-        const val = t.checked ? 'dark' : 'light';
-        document.body.classList.toggle('dark', val === 'dark');
-        try { localStorage.setItem('theme', val); } catch(e){}
-      });
-    } else {
-      const updateIcon = (isDark) => { try { t.textContent = isDark ? '☀' : '☾'; } catch(e){} };
-      updateIcon(saved === 'dark');
-      t.addEventListener('click', () => {
-        const isDark = document.body.classList.toggle('dark');
-        updateIcon(isDark);
-        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e){}
-      });
-    }
-  } catch(e){
-    console.warn('theme toggle error', e);
+/* ============================
+   RENDER ADD COURSE
+============================ */
+function renderAddCourseForm() {
+  const main = qs('.wa-main');
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>Tambah Course</h2>
+      <input class="wa-input" id="cName" placeholder="Nama course">
+      <textarea class="wa-textarea" id="cDesc" placeholder="Deskripsi"></textarea>
+      <button class="wa-btn" id="saveBtn">Simpan</button>
+    </div>
+  `;
+
+  qs('#saveBtn').onclick = async () => {
+    const name = qs('#cName').value.trim();
+    const desc = qs('#cDesc').value.trim();
+
+    if (!name) return showToast("Nama wajib diisi", "error");
+
+    const course = {
+      id: makeId('c-'),
+      name,
+      description: desc,
+      questions: []
+    };
+
+    await saveCourseToFirestore(course);
+    showToast("Course ditambahkan", "success");
+    renderUI();
+    loadCourses();
+  };
+}
+
+/* ============================
+   RENDER EDIT COURSE
+============================ */
+function renderEditCourseForm(course) {
+  const main = qs('.wa-main');
+
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>Edit Course</h2>
+      <input class="wa-input" id="cName" value="${course.name}">
+      <textarea class="wa-textarea" id="cDesc">${course.description}</textarea>
+      <button class="wa-btn" id="saveBtn">Update</button>
+    </div>
+  `;
+
+  qs('#saveBtn').onclick = async () => {
+    const name = qs('#cName').value.trim();
+    const desc = qs('#cDesc').value.trim();
+
+    await updateCourseInFirestore(course.id, {
+      name,
+      description: desc
+    });
+
+    showToast("Course diperbarui", "success");
+    renderUI();
+    loadCourses();
+  };
+}
+
+/* ============================
+   RENDER ADD QUESTION
+============================ */
+function renderAddQuestionForm(course) {
+  const main = qs('.wa-main');
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>Tambah Pertanyaan</h2>
+      <textarea class="wa-textarea" id="qText" placeholder="Pertanyaan"></textarea>
+
+      <input class="wa-input" id="optA" placeholder="Pilihan A">
+      <input class="wa-input" id="optB" placeholder="Pilihan B">
+      <input class="wa-input" id="optC" placeholder="Pilihan C">
+      <input class="wa-input" id="optD" placeholder="Pilihan D">
+
+      <select class="wa-select" id="qCorrect">
+        <option value="A">Jawaban A</option>
+        <option value="B">Jawaban B</option>
+        <option value="C">Jawaban C</option>
+        <option value="D">Jawaban D</option>
+      </select>
+
+      <textarea class="wa-textarea" id="qExplain" placeholder="Penjelasan (opsional)"></textarea>
+
+      <button class="wa-btn" id="saveBtn">Simpan Pertanyaan</button>
+    </div>
+  `;
+
+  qs('#saveBtn').onclick = async () => {
+    const q = {
+      id: makeId("q-"),
+      question: qs('#qText').value.trim(),
+      options: {
+        A: qs('#optA').value.trim(),
+        B: qs('#optB').value.trim(),
+        C: qs('#optC').value.trim(),
+        D: qs('#optD').value.trim(),
+      },
+      correct: qs('#qCorrect').value,
+      explanation: qs('#qExplain').value.trim()
+    };
+
+    await addQuestionToCourse(course.id, q);
+
+    showToast("Pertanyaan ditambahkan", "success");
+
+    const updated = await getAllCourses();
+    renderCourseDetail(updated.find(c => c.id === course.id));
+  };
+}
+
+/* ============================
+   RENDER EDIT QUESTION
+============================ */
+function renderEditQuestionForm(course, qid) {
+  const q = course.questions.find(x => x.id === qid);
+  const main = qs('.wa-main');
+
+  main.innerHTML = `
+    <div class="wa-card">
+      <h2>Edit Pertanyaan</h2>
+
+      <textarea class="wa-textarea" id="qText">${q.question}</textarea>
+
+      <input class="wa-input" id="optA" value="${q.options.A}">
+      <input class="wa-input" id="optB" value="${q.options.B}">
+      <input class="wa-input" id="optC" value="${q.options.C}">
+      <input class="wa-input" id="optD" value="${q.options.D}">
+
+      <select class="wa-select" id="qCorrect">
+        <option ${q.correct === "A" ? "selected" : ""}>A</option>
+        <option ${q.correct === "B" ? "selected" : ""}>B</option>
+        <option ${q.correct === "C" ? "selected" : ""}>C</option>
+        <option ${q.correct === "D" ? "selected" : ""}>D</option>
+      </select>
+
+      <textarea class="wa-textarea" id="qExplain">${q.explanation || ""}</textarea>
+
+      <button class="wa-btn" id="saveBtn">Update Pertanyaan</button>
+    </div>
+  `;
+
+  qs('#saveBtn').onclick = async () => {
+    const updated = {
+      question: qs('#qText').value.trim(),
+      options: {
+        A: qs('#optA').value.trim(),
+        B: qs('#optB').value.trim(),
+        C: qs('#optC').value.trim(),
+        D: qs('#optD').value.trim(),
+      },
+      correct: qs('#qCorrect').value,
+      explanation: qs('#qExplain').value.trim()
+    };
+
+    await updateQuestionInCourse(course.id, qid, updated);
+
+    showToast("Pertanyaan diperbarui", "success");
+
+    const updatedData = await getAllCourses();
+    renderCourseDetail(updatedData.find(c => c.id === course.id));
+  };
+}
+
+/* ============================
+   AUTH HANDLING
+============================ */
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    document.body.innerHTML = `
+      <div style="padding:40px;text-align:center;font-family:sans-serif;">
+        <h2>Login Admin</h2>
+        <input id="email" placeholder="Email" style="padding:10px;margin:10px;width:220px;">
+        <br>
+        <input id="pass" placeholder="Password" type="password" style="padding:10px;margin:10px;width:220px;">
+        <br>
+        <button id="loginBtn" style="padding:10px 20px;">Login</button>
+      </div>
+    `;
+
+    qs('#loginBtn').onclick = async () => {
+      const email = qs('#email').value;
+      const pass = qs('#pass').value;
+
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (err) {
+        alert("Login gagal: " + err.message);
+      }
+    };
+
+    return;
   }
-}
 
-// ---------- Init & boot ----------
-async function initApp() {
-  injectChoiceStyles();
-  wireThemeToggle();
-  await renderCourses();
-  showOnlySection('coursesSection');
-  // attach global UI if present
-  const refreshBtn = $('btnRefresh');
-  if (refreshBtn) refreshBtn.onclick = () => renderCourses();
-}
-document.addEventListener('DOMContentLoaded', initApp);
+  renderUI();
+  loadCourses();
+});
