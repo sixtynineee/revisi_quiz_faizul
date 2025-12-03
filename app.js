@@ -1,5 +1,4 @@
-// app.js (REVISI: robust + compatible with different index.html variants)
-// Materi -> Soal flow with defensive DOM checks and flexible theme toggle
+// app.js (FINAL REVISI) — Robust, UX-friendly, custom result layout
 
 // ---------- FIREBASE IMPORTS (CDN) ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
@@ -22,6 +21,27 @@ const $ = id => document.getElementById(id);
 const qsa = s => Array.from(document.querySelectorAll(s));
 const escapeHtml = s => String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;'})[c]);
 
+// ---------- Inject choice styles (ensures visual feedback even if CSS missing) ----------
+function injectChoiceStyles() {
+  if (document.getElementById('injected-choice-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'injected-choice-styles';
+  style.textContent = `
+    .choice.chosen { background: var(--accent, #00A884); color: #fff; border-color: var(--accent, #00A884); transform: none; }
+    .choice.final-correct { background: rgba(16,185,129,0.12); border-color: #10b981; color: inherit; box-shadow: 0 2px 8px rgba(16,185,129,0.08); }
+    .choice.final-wrong { background: rgba(239,68,68,0.08); border-color: #ef4444; color: inherit; opacity: 1; }
+    .result-summary { display:flex;gap:12px;align-items:center;flex-wrap:wrap }
+    .result-score { font-size:28px;font-weight:700 }
+    .progress-bar { width:180px;height:10px;border-radius:999px; background:rgba(0,0,0,0.06); overflow:hidden }
+    .progress-bar > i { display:block;height:100%;background:var(--accent,#00A884); width:0% }
+    .result-breakdown { margin-top:12px; display:flex;flex-direction:column; gap:8px; max-height:300px; overflow:auto; padding-right:6px }
+    .result-item { padding:10px;border-radius:8px;background:var(--card); border:1px solid var(--glass); }
+    .result-item .meta { font-size:13px;color:var(--muted) }
+    @media (max-width:720px) { .result-summary { flex-direction:column; align-items:flex-start } }
+  `;
+  document.head.appendChild(style);
+}
+
 // ---------- State ----------
 let COURSES = []; // loaded courses (with materi normalized)
 let CURRENT_COURSE = null; // course object
@@ -43,7 +63,12 @@ async function loadCoursesRaw() {
           delete data.questions;
         } else data.materi = [];
       } else {
-        data.materi = data.materi.map(m => ({ id: m.id || ('m-'+Math.random().toString(36).slice(2,8)), title: m.title || 'Untitled', description: m.description || '', questions: Array.isArray(m.questions) ? m.questions : [] }));
+        data.materi = data.materi.map(m => ({
+          id: m.id || ('m-'+Math.random().toString(36).slice(2,8)),
+          title: m.title || 'Untitled',
+          description: m.description || '',
+          questions: Array.isArray(m.questions) ? m.questions : []
+        }));
       }
       list.push({ id: d.id, ...data });
     });
@@ -145,7 +170,6 @@ function renderMateriList(course) {
 // ---------- Modal fallback when materiSection missing ----------
 function openMateriModal(course) {
   const modalId = 'materi_modal';
-  // avoid duplicate
   if (document.getElementById(modalId)) return;
   const wrapper = document.createElement('div');
   wrapper.id = modalId;
@@ -167,7 +191,6 @@ function openMateriModal(course) {
     list.appendChild(r);
   });
 
-  // handlers
   list.querySelectorAll('.modal_start').forEach(b => b.onclick = (ev) => {
     const courseId = ev.currentTarget.dataset.course;
     const i = parseInt(ev.currentTarget.dataset.i,10);
@@ -217,6 +240,7 @@ async function startQuizFromMateri(courseId, materiIndex) {
 
 // ---------- quiz rendering ----------
 function renderQuizFromCurrent() {
+  injectChoiceStyles();
   const titleEl = $('quizTitle');
   const container = $('quizContainer');
   if (titleEl) titleEl.textContent = `${escapeHtml(CURRENT_COURSE.name)} / ${escapeHtml(CURRENT_MATERI.title)}`;
@@ -227,9 +251,11 @@ function renderQuizFromCurrent() {
   container.innerHTML = '';
   CURRENT_QUESTIONS.forEach((q, idx) => {
     const card = document.createElement('div'); card.className = 'question-card'; card.id = `qcard-${idx}`;
+    // Ensure option existence
+    const opts = ['A','B','C','D'].map(opt => ({ opt, txt: q.options?.[opt] || '' }));
     card.innerHTML = `<div class="q-text"><b>${idx+1}.</b> ${escapeHtml(q.question)}</div>
       <div class="choices" id="choices-${idx}">
-        ${['A','B','C','D'].map(opt=>`<div class="choice" data-opt="${opt}" data-idx="${idx}"><span class="label">${opt}.</span> <span class="text">${escapeHtml(q.options?.[opt]||'')}</span></div>`).join('')}
+        ${opts.map(o=>`<div class="choice" data-opt="${o.opt}" data-idx="${idx}"><span class="label">${o.opt}.</span> <span class="text">${escapeHtml(o.txt)}</span></div>`).join('')}
       </div>
       <div class="explanation muted" id="exp-${idx}" style="display:none;margin-top:8px">${escapeHtml(q.explanation||'Tidak ada penjelasan')}</div>`;
     container.appendChild(card);
@@ -254,8 +280,12 @@ function attachChoiceEventsApp() {
       const el = ev.currentTarget;
       const idx = parseInt(el.dataset.idx,10);
       const opt = el.dataset.opt;
+      // allow change until finished
       USER_ANSWERS[idx] = opt;
-      qsa(`#choices-${idx} .choice`).forEach(x=>x.classList.remove('chosen'));
+      // visual: remove chosen on siblings and add chosen on clicked
+      qsa(`#choices-${idx} .choice`).forEach(x=>{
+        x.classList.remove('chosen');
+      });
       el.classList.add('chosen');
       updateProgressApp();
     });
@@ -266,7 +296,7 @@ function renderQuizHeaderApp() {
   const header = $('quizHeader');
   if(!header) return;
   const total = CURRENT_QUESTIONS.length;
-  header.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600">${escapeHtml(CURRENT_MATERI.title)} — ${total} soal</div><div><button id="btnFinish" class="btn">Selesai</button></div></div>`;
+  header.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600">${escapeHtml(CURRENT_MATERI.title)} — ${total} soal</div><div><button id="btnFinish" class="btn primary">Selesai</button></div></div>`;
   const btn = $('btnFinish');
   if (btn) btn.onclick = finishQuizApp;
 }
@@ -278,6 +308,7 @@ function updateProgressApp() {
   if(prog) prog.textContent = `${answered} / ${total} terjawab`;
 }
 
+// ---------- Finish quiz: mark & show custom result layout ----------
 function finishQuizApp() {
   // mark correct/wrong, show score and explanation
   let score = 0;
@@ -285,9 +316,16 @@ function finishQuizApp() {
     const user = USER_ANSWERS[i];
     const correct = q.correct;
     qsa(`#choices-${i} .choice`).forEach(c => {
+      // reset states
       c.classList.remove('final-correct','final-wrong');
-      if(c.dataset.opt === correct) c.classList.add('final-correct');
-      else if(c.dataset.opt === user) c.classList.add('final-wrong');
+      c.classList.remove('chosen'); // remove chosen if present; we'll re-add if user's choice
+      // mark correct / wrong
+      if (c.dataset.opt === correct) c.classList.add('final-correct');
+      if (user && c.dataset.opt === user && user !== correct) c.classList.add('final-wrong');
+      // if user selected and it's correct, visually show chosen + correct style
+      if (user && c.dataset.opt === user && user === correct) {
+        c.classList.add('final-correct');
+      }
     });
     const exp = $('exp-'+i);
     if(exp) exp.style.display = 'block';
@@ -295,25 +333,164 @@ function finishQuizApp() {
   });
   const total = CURRENT_QUESTIONS.length;
 
-  // prioritize resultBox, then resultSection
-  const resultBox = $('resultBox') || $('resultSection');
-  if (resultBox) {
-    resultBox.innerHTML = `<div class="card"><h3>Hasil: ${score} / ${total}</h3><div style="margin-top:12px"><button id="backToMateri" class="btn ghost">Kembali ke Materi</button> <button id="retryBtn" class="btn">Ulangi</button></div></div>`;
-    const backBtn = $('backToMateri');
-    if (backBtn) backBtn.onclick = () => { showOnlySection('materiSection'); if(CURRENT_COURSE) renderMateriList(CURRENT_COURSE); };
-    const retry = $('retryBtn');
-    if (retry) retry.onclick = () => { startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m=>m.id===CURRENT_MATERI.id)); };
+  // build custom result layout
+  const resultHtml = buildCustomResultHtml(score, total);
+  // prefer a dedicated resultSection element (recommended)
+  const resultSection = $('resultSection');
+  if (resultSection) {
+    resultSection.innerHTML = resultHtml;
+    // wire result actions
+    wireResultActions(score, total);
     showOnlySection('resultSection');
-  } else {
-    alert(`Hasil: ${score} / ${total}`);
-    showOnlySection('coursesSection');
+    resultSection.scrollIntoView({behavior:'smooth'});
+    return;
   }
+
+  // fallback to inline resultBox in quiz page
+  const resultBox = $('resultBox');
+  if (resultBox) {
+    resultBox.innerHTML = resultHtml;
+    wireResultActions(score, total);
+    resultBox.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+
+  // fallback modal
+  showResultModal(resultHtml, score, total);
+}
+
+function buildCustomResultHtml(score, total) {
+  const percent = total ? Math.round((score/total)*100) : 0;
+  const breakdownItems = CURRENT_QUESTIONS.map((q, i) => {
+    const user = USER_ANSWERS[i] || null;
+    const correct = q.correct;
+    const isCorrect = user === correct;
+    const choicesHtml = ['A','B','C','D'].map(k=>{
+      const txt = escapeHtml(q.options?.[k] || '');
+      const marker = (k === correct) ? '✔' : (user === k && !isCorrect ? '✕' : '');
+      const cls = (k === correct) ? 'final-correct' : (user === k && !isCorrect ? 'final-wrong' : '');
+      return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div style="flex:1"><small style="font-weight:600">${k}.</small> ${txt}</div><div style="min-width:36px;text-align:right" class="${cls}" aria-hidden="true">${marker}</div></div>`;
+    }).join('');
+    return `
+      <div class="result-item">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><b>${i+1}.</b> ${escapeHtml(q.question)}</div>
+          <div class="meta">${isCorrect ? '<span style="color:var(--accent)">Benar</span>' : '<span style="color:var(--danger)">Salah</span>'}</div>
+        </div>
+        <div style="margin-top:8px">${choicesHtml}</div>
+        <div style="margin-top:8px" class="meta">Jawaban Anda: ${user || '-'} • Kunci: ${correct}</div>
+        <div class="explanation" style="margin-top:8px">${escapeHtml(q.explanation||'Tidak ada penjelasan')}</div>
+      </div>
+    `;
+  }).join('');
+
+  // summary and progress bar
+  const html = `
+    <div class="card">
+      <div class="result-summary">
+        <div>
+          <div class="result-score">${score} / ${total}</div>
+          <div class="muted">${percent}%</div>
+        </div>
+        <div class="progress-bar" aria-hidden="true"><i style="width:${percent}%;"></i></div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="muted">Benar: ${score}</div>
+          <div class="muted">Salah: ${total - score}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="resultBackToMateri" class="btn ghost">Kembali</button>
+        <button id="resultRetry" class="btn">Ulangi</button>
+        <button id="resultDownload" class="btn">Download JSON</button>
+      </div>
+
+      <div class="result-breakdown" style="margin-top:12px">${breakdownItems}</div>
+    </div>
+  `;
+  return html;
+}
+
+function wireResultActions(score, total) {
+  const back = $('resultBackToMateri');
+  if (back) back.onclick = () => { showOnlySection('materiSection'); if(CURRENT_COURSE) renderMateriList(CURRENT_COURSE); };
+  const retry = $('resultRetry');
+  if (retry) retry.onclick = () => {
+    // restart same materi
+    startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m => m.id === CURRENT_MATERI.id));
+  };
+  const dl = $('resultDownload');
+  if (dl) dl.onclick = () => {
+    const payload = {
+      courseId: CURRENT_COURSE?.id || null,
+      courseName: CURRENT_COURSE?.name || null,
+      materiId: CURRENT_MATERI?.id || null,
+      materiTitle: CURRENT_MATERI?.title || null,
+      score: score,
+      total: total,
+      percent: total ? Math.round((score/total)*100) : 0,
+      userAnswers: USER_ANSWERS,
+      timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `quiz-result-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+}
+
+function showResultModal(html, score, total) {
+  const id = 'result_modal';
+  if (document.getElementById(id)) document.getElementById(id).remove();
+  const wrap = document.createElement('div');
+  wrap.id = id;
+  wrap.style = 'position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5);z-index:99999;padding:16px';
+  const box = document.createElement('div');
+  box.style = 'max-width:860px;width:100%;background:var(--card);padding:16px;border-radius:12px;max-height:88vh;overflow:auto';
+  box.innerHTML = html + `<div style="text-align:right;margin-top:12px"><button id="closeResultModal" class="btn">Tutup</button></div>`;
+  wrap.appendChild(box);
+  document.body.appendChild(wrap);
+  const close = $('closeResultModal');
+  if (close) close.onclick = () => wrap.remove();
+  // wire download & retry inside modal
+  const retry = box.querySelector('#resultRetry');
+  if (retry) retry.onclick = () => {
+    wrap.remove();
+    startQuizFromMateri(CURRENT_COURSE.id, CURRENT_COURSE.materi.findIndex(m=>m.id===CURRENT_MATERI.id));
+  };
+  const dl = box.querySelector('#resultDownload');
+  if (dl) dl.onclick = () => {
+    // reuse wireResultActions code: create click programmatically
+    const payload = {
+      courseId: CURRENT_COURSE?.id || null,
+      courseName: CURRENT_COURSE?.name || null,
+      materiId: CURRENT_MATERI?.id || null,
+      materiTitle: CURRENT_MATERI?.title || null,
+      score: score,
+      total: total,
+      userAnswers: USER_ANSWERS,
+      timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `quiz-result-${Date.now()}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
 }
 
 // ---------- small helpers ----------
 function showOnlySection(id) {
   const known = ['coursesSection','materiSection','quizSection','resultSection'];
+  // if the page uses section tags or not, try multiple approaches
   known.forEach(i => { const n = $(i); if(!n) return; n.style.display = (i===id) ? 'block' : 'none'; });
+  // also hide any element with data-section attribute for progressive enhancement
+  qsa('[data-section]').forEach(el => { el.style.display = (el.dataset.section === id) ? 'block' : 'none'; });
 }
 
 function shuffleArray(a) {
@@ -326,21 +503,20 @@ function shuffleArray(a) {
 
 // ---------- Theme: support button or checkbox ----------
 function wireThemeToggle() {
-  const t = $('themeToggle');
+  const t = $('themeToggle') || $('themeToggleAdmin') || $('themeBtnAdmin');
   try {
     const saved = localStorage.getItem('theme') || 'light';
     document.body.classList.toggle('dark', saved === 'dark');
-    // If it's a checkbox input
-    if (t && (t.tagName.toLowerCase() === 'input' && t.type === 'checkbox')) {
+    if (!t) return;
+    if (t.tagName.toLowerCase() === 'input' && t.type === 'checkbox') {
       t.checked = saved === 'dark';
       t.addEventListener('change', () => {
         const val = t.checked ? 'dark' : 'light';
         document.body.classList.toggle('dark', val === 'dark');
         try { localStorage.setItem('theme', val); } catch(e){}
       });
-    } else if (t) {
-      // treat as button toggle
-      const updateIcon = (isDark) => { t.textContent = isDark ? '☀' : '☾'; };
+    } else {
+      const updateIcon = (isDark) => { try { t.textContent = isDark ? '☀' : '☾'; } catch(e){} };
       updateIcon(saved === 'dark');
       t.addEventListener('click', () => {
         const isDark = document.body.classList.toggle('dark');
@@ -355,8 +531,12 @@ function wireThemeToggle() {
 
 // ---------- Init & boot ----------
 async function initApp() {
+  injectChoiceStyles();
   wireThemeToggle();
   await renderCourses();
   showOnlySection('coursesSection');
+  // attach global UI if present
+  const refreshBtn = $('btnRefresh');
+  if (refreshBtn) refreshBtn.onclick = () => renderCourses();
 }
 document.addEventListener('DOMContentLoaded', initApp);
