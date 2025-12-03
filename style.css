@@ -589,3 +589,21 @@ textarea {
   font-size: 12px;
   font-weight: 500;
 }
+
+.answer-box.user-answer {
+  border-left: 4px solid #007bff; /* Warna biru untuk jawaban pengguna */
+  background-color: rgba(0, 123, 255, 0.1);
+}
+
+.answer-box.correct-answer {
+  border-left: 4px solid #28a745; /* Warna hijau untuk jawaban benar */
+  background-color: rgba(40, 167, 69, 0.1);
+}
+
+.question-item.correct {
+  border-left-color: #28a745;
+}
+
+.question-item.incorrect {
+  border-left-color: #dc3545;
+}
