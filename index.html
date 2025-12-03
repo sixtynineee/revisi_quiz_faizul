@@ -5,53 +5,91 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QuizApp - Belajar Interaktif</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
-<body>
+<body data-theme="light">
     <div class="app">
+        <!-- Header -->
         <header class="topbar">
-            <h1>📚 QuizApp</h1>
+            <div class="brand">
+                <h1><i class="fas fa-graduation-cap"></i> QuizApp</h1>
+                <p class="muted" style="font-size: 12px; margin-top: 2px;">Belajar dengan cara yang menyenangkan</p>
+            </div>
             <div class="top-actions">
-                <button id="themeToggle" class="btn circle">☾</button>
-                <a class="btn" href="admin.html">Admin</a>
+                <a href="admin.html" class="btn secondary">
+                    <i class="fas fa-user-shield"></i> Admin
+                </a>
             </div>
         </header>
 
+        <!-- Main Content -->
         <main class="container">
-            <section class="card">
-                <h2>Selamat Datang di QuizApp</h2>
-                <p>Platform belajar interaktif dengan sistem quiz untuk meningkatkan pemahaman Anda.</p>
-                
-                <div class="features">
-                    <div class="feature-item">
-                        <h3>🎓 Mata Kuliah Lengkap</h3>
-                        <p>Akses berbagai mata kuliah dengan materi yang terstruktur</p>
+            <!-- Welcome Card -->
+            <div class="card fade-in">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #25D366, #128C7E); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
+                        <i class="fas fa-brain"></i>
                     </div>
-                    <div class="feature-item">
-                        <h3>📝 Quiz Interaktif</h3>
-                        <p>Uji pengetahuan dengan quiz yang menarik</p>
-                    </div>
-                    <div class="feature-item">
-                        <h3>📊 Hasil Real-time</h3>
-                        <p>Dapatkan hasil dan analisis langsung</p>
+                    <div>
+                        <h2 style="margin-bottom: 4px;">Selamat Datang!</h2>
+                        <p class="muted">Pilih mata kuliah untuk mulai belajar</p>
                     </div>
                 </div>
                 
-                <div style="text-align: center; margin-top: 30px;">
-                    <a href="quiz.html" class="btn primary" style="padding: 12px 24px; font-size: 16px;">
-                        Mulai Belajar Sekarang →
-                    </a>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 24px 0;">
+                    <div style="background: rgba(37, 211, 102, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(37, 211, 102, 0.2);">
+                        <i class="fas fa-book" style="color: #25D366; font-size: 20px; margin-bottom: 8px;"></i>
+                        <h4 style="margin-bottom: 4px;">Mata Kuliah Lengkap</h4>
+                        <p class="muted" style="font-size: 13px;">Akses berbagai materi pembelajaran</p>
+                    </div>
+                    <div style="background: rgba(52, 183, 241, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(52, 183, 241, 0.2);">
+                        <i class="fas fa-question-circle" style="color: #34B7F1; font-size: 20px; margin-bottom: 8px;"></i>
+                        <h4 style="margin-bottom: 4px;">Quiz Interaktif</h4>
+                        <p class="muted" style="font-size: 13px;">Uji pengetahuan dengan soal menarik</p>
+                    </div>
+                    <div style="background: rgba(7, 94, 84, 0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(7, 94, 84, 0.2);">
+                        <i class="fas fa-chart-line" style="color: #075E54; font-size: 20px; margin-bottom: 8px;"></i>
+                        <h4 style="margin-bottom: 4px;">Hasil Real-time</h4>
+                        <p class="muted" style="font-size: 13px;">Pantau perkembangan belajar Anda</p>
+                    </div>
                 </div>
-            </section>
-            
-            <section class="card">
-                <h3>📋 Daftar Mata Kuliah</h3>
-                <div id="mataKuliahList" class="list"></div>
-            </section>
+            </div>
+
+            <!-- Mata Kuliah List -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2><i class="fas fa-book-open"></i> Daftar Mata Kuliah</h2>
+                    <button id="refreshBtn" class="btn secondary">
+                        <i class="fas fa-redo"></i> Refresh
+                    </button>
+                </div>
+                
+                <div id="mataKuliahList" class="list">
+                    <!-- Mata kuliah akan di-load dari Firebase -->
+                    <div class="loading-placeholder">
+                        <div class="spinner"></div>
+                        <p style="text-align: center; margin-top: 16px; color: var(--text-muted);">Memuat mata kuliah...</p>
+                    </div>
+                </div>
+            </div>
         </main>
 
+        <!-- Footer -->
         <footer class="footer">
-            <small>© 2024 QuizApp • Belajar dengan cara yang menyenangkan</small>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <small>© 2024 QuizApp • Platform Belajar Interaktif</small>
+                <div class="muted" style="display: flex; gap: 16px; align-items: center;">
+                    <span id="totalCourses">0 Mata Kuliah</span>
+                    <span>•</span>
+                    <span id="totalQuestions">0 Soal</span>
+                </div>
+            </div>
         </footer>
+        
+        <!-- Theme Toggle Button -->
+        <button id="themeToggle" class="theme-switcher">
+            <i class="fas fa-moon"></i>
+        </button>
     </div>
 
     <script type="module" src="app.js"></script>
