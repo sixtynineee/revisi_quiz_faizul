@@ -10,12 +10,12 @@ import {
 // 0. Firebase Config (ISI PUNYA KAMU SENDIRI)
 // -------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
+  authDomain: "quizappfaizul.firebaseapp.com",
+  projectId: "quizappfaizul",
+  storageBucket: "quizappfaizul.firebasestorage.app",
+  messagingSenderId: "177544522930",
+  appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
 // -------------------------------------------------------
@@ -314,3 +314,4 @@ btnAddSoal.addEventListener("click", async () => {
 if (coursesView) {
   loadCourses();
 }
+
