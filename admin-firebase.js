@@ -1,9 +1,8 @@
 // admin-firebase.js
-// Single-file admin panel script (no build). Requires style.css present.
-// Provides: Firebase Auth (admin), Firestore CRUD (courses/questions), local fallback,
-// WhatsApp-like admin UI injection, dark-mode toggle, toasts.
+// Revisi dengan struktur: Mata Kuliah -> Course -> Soal
+// WhatsApp-like admin UI dengan hierarki terstruktur
 
-// ----------------------- CONFIG (GANTI DENGAN FIREBASE MU) -----------------------
+// ----------------------- CONFIG -----------------------
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -13,7 +12,7 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// ----------------------- Imports (Firebase modular via CDN) -----------------------
+// ----------------------- Firebase Imports -----------------------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import {
   getAuth,
@@ -30,7 +29,9 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  Timestamp
+  Timestamp,
+  query,
+  orderBy
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
 // ----------------------- Init Firebase -----------------------
@@ -38,19 +39,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ----------------------- Local fallback keys & defaults -----------------------
-const STORAGE_KEY = "quizData_v1";
-const DEFAULT_DATA = {
-  courses: [
-    {
-      id: "local-1",
-      name: "Sample Course (Local)",
-      description: "Contoh course yang disimpan lokal",
-      questions: [
-        { id: "q-1", question: "Apa kepanjangan CPU?", options: {A:"Central Processing Unit",B:"Control Process Unit"}, correct: "A", explanation: "CPU adalah unit pemrosesan utama." }
-      ]
-    }
-  ]
+// ----------------------- Global State -----------------------
+let APP = {
+  user: null,
+  mataKuliah: [],           // Level 1: Mata Kuliah
+  courses: [],              // Level 2: Courses dalam mata kuliah tertentu
+  soal: [],                 // Level 3: Soal dalam course tertentu
+  participants: [],
+  scores: [],
+  currentMataKuliah: null,  // Mata kuliah yang sedang dipilih
+  currentCourse: null       // Course yang sedang dipilih
 };
 
 // ----------------------- Utilities -----------------------
@@ -66,55 +64,214 @@ const el = (tag, attrs = {}, ...children) => {
   return e;
 };
 const qs = s => document.querySelector(s);
+const qsa = s => document.querySelectorAll(s);
+const escapeHTML = str => str ? String(str).replace(/[&<>"']/g, m => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[m]) : '';
 
-// ----------------------- Local storage helpers -----------------------
-function readLocalData() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_DATA));
-  try { return JSON.parse(raw); } catch (e) { localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DATA)); return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+// ----------------------- Toast -----------------------
+function toast(msg, type = 'info') {
+  const t = el('div', { class: `wa-toast ${type}` }, msg);
+  Object.assign(t.style, {
+    position: 'fixed', right: '20px', top: '20px',
+    background: type === 'success' ? '#25D366' : type === 'error' ? '#ff6b6b' : '#0b74de',
+    color: '#fff', padding: '10px 14px', borderRadius: '10px',
+    zIndex: 9999, boxShadow: '0 6px 18px rgba(0,0,0,0.2)', transition: 'opacity 0.3s'
+  });
+  document.body.appendChild(t);
+  setTimeout(() => t.style.opacity = '0', 2800);
+  setTimeout(() => t.remove(), 3200);
 }
-function writeLocalData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
-const makeId = (p='') => p + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 
-// ----------------------- Firestore wrappers with graceful fallback -----------------------
-async function fetchCoursesRemote() {
+// ----------------------- Firebase Operations (Struktur Baru) -----------------------
+
+// 1. Mata Kuliah Operations
+async function fetchMataKuliah() {
   try {
-    const snap = await getDocs(collection(db, "courses"));
+    const q = query(collection(db, "mata_kuliah"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
     const list = [];
-    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => list.push({
+      id: d.id,
+      name: d.data().nama || d.data().name,
+      description: d.data().description || '',
+      totalCourses: d.data().totalCourses || 0,
+      ...d.data()
+    }));
     return list;
   } catch (err) {
-    console.warn("fetchCoursesRemote failed:", err);
-    return null;
+    console.warn("fetchMataKuliah failed:", err);
+    return [];
   }
 }
-async function saveCourseRemote(course) {
+
+async function saveMataKuliahRemote(mataKuliah) {
   try {
-    const ref = await addDoc(collection(db, "courses"), { name: course.name, description: course.description || '', questions: course.questions || [], createdAt: Timestamp.now() });
+    const ref = await addDoc(collection(db, "mata_kuliah"), {
+      nama: mataKuliah.name,
+      description: mataKuliah.description || '',
+      totalCourses: 0,
+      createdAt: Timestamp.now()
+    });
+    return { success: true, id: ref.id };
+  } catch (err) {
+    console.warn("saveMataKuliahRemote failed", err);
+    return { success: false };
+  }
+}
+
+async function updateMataKuliahRemote(id, updates) {
+  try {
+    await updateDoc(doc(db, "mata_kuliah", id), updates);
+    return { success: true };
+  } catch (err) {
+    console.warn("updateMataKuliahRemote failed", err);
+    return { success: false };
+  }
+}
+
+async function deleteMataKuliahRemote(id) {
+  try {
+    // Hapus semua course dan soal dalam mata kuliah ini
+    const coursesSnap = await getDocs(collection(db, "mata_kuliah", id, "courses"));
+    const deletePromises = coursesSnap.docs.map(courseDoc => 
+      deleteDoc(doc(db, "mata_kuliah", id, "courses", courseDoc.id))
+    );
+    await Promise.all(deletePromises);
+    
+    // Hapus mata kuliah
+    await deleteDoc(doc(db, "mata_kuliah", id));
+    return { success: true };
+  } catch (err) {
+    console.warn("deleteMataKuliahRemote failed", err);
+    return { success: false };
+  }
+}
+
+// 2. Course Operations
+async function fetchCourses(mataKuliahId) {
+  try {
+    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(d => list.push({
+      id: d.id,
+      mataKuliahId: mataKuliahId,
+      name: d.data().nama || d.data().name,
+      description: d.data().description || '',
+      totalSoal: d.data().totalSoal || 0,
+      ...d.data()
+    }));
+    return list;
+  } catch (err) {
+    console.warn("fetchCourses failed:", err);
+    return [];
+  }
+}
+
+async function saveCourseRemote(mataKuliahId, course) {
+  try {
+    const ref = await addDoc(collection(db, "mata_kuliah", mataKuliahId, "courses"), {
+      nama: course.name,
+      description: course.description || '',
+      totalSoal: 0,
+      createdAt: Timestamp.now()
+    });
+    
+    // Update counter di mata kuliah
+    await updateMataKuliahRemote(mataKuliahId, {
+      totalCourses: firebase.firestore.FieldValue.increment(1)
+    });
+    
     return { success: true, id: ref.id };
   } catch (err) {
     console.warn("saveCourseRemote failed", err);
     return { success: false };
   }
 }
-async function updateCourseRemote(id, updates) {
+
+async function deleteCourseRemote(mataKuliahId, courseId) {
   try {
-    await updateDoc(doc(db, "courses", id), updates);
-    return { success: true };
-  } catch (err) {
-    console.warn("updateCourseRemote failed", err);
-    return { success: false };
-  }
-}
-async function deleteCourseRemote(id) {
-  try {
-    await deleteDoc(doc(db, "courses", id));
+    // Hapus semua soal dalam course
+    const soalSnap = await getDocs(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"));
+    const deletePromises = soalSnap.docs.map(soalDoc =>
+      deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal", soalDoc.id))
+    );
+    await Promise.all(deletePromises);
+    
+    // Hapus course
+    await deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId));
+    
+    // Update counter di mata kuliah
+    await updateMataKuliahRemote(mataKuliahId, {
+      totalCourses: firebase.firestore.FieldValue.increment(-1)
+    });
+    
     return { success: true };
   } catch (err) {
     console.warn("deleteCourseRemote failed", err);
     return { success: false };
   }
 }
+
+// 3. Soal Operations
+async function fetchSoal(mataKuliahId, courseId) {
+  try {
+    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach(d => list.push({
+      id: d.id,
+      mataKuliahId: mataKuliahId,
+      courseId: courseId,
+      ...d.data()
+    }));
+    return list;
+  } catch (err) {
+    console.warn("fetchSoal failed:", err);
+    return [];
+  }
+}
+
+async function saveSoalRemote(mataKuliahId, courseId, soal) {
+  try {
+    const ref = await addDoc(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"), {
+      pertanyaan: soal.pertanyaan || soal.question,
+      pilihan: soal.pilihan || soal.options,
+      jawaban: soal.jawaban || soal.correct,
+      explanation: soal.explanation || '',
+      createdAt: Timestamp.now()
+    });
+    
+    // Update counter soal di course
+    await updateDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId), {
+      totalSoal: firebase.firestore.FieldValue.increment(1)
+    });
+    
+    return { success: true, id: ref.id };
+  } catch (err) {
+    console.warn("saveSoalRemote failed", err);
+    return { success: false };
+  }
+}
+
+async function deleteSoalRemote(mataKuliahId, courseId, soalId) {
+  try {
+    await deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal", soalId));
+    
+    // Update counter soal di course
+    await updateDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId), {
+      totalSoal: firebase.firestore.FieldValue.increment(-1)
+    });
+    
+    return { success: true };
+  } catch (err) {
+    console.warn("deleteSoalRemote failed", err);
+    return { success: false };
+  }
+}
+
+// ----------------------- Admin Check -----------------------
 async function isAdminUid(uid) {
   if (!uid) return false;
   try {
@@ -126,329 +283,622 @@ async function isAdminUid(uid) {
   }
 }
 
-// ----------------------- Toast -----------------------
-function toast(msg, type='info') {
-  const t = el('div', { class: `wa-toast ${type}` }, msg);
-  Object.assign(t.style, { position:'fixed', right:'20px', top:'20px', background: type==='success' ? '#25D366' : type==='error' ? '#ff6b6b' : '#0b74de', color:'#fff', padding:'10px 14px', borderRadius:'10px', zIndex:9999, boxShadow:'0 6px 18px rgba(0,0,0,0.2)' });
-  document.body.appendChild(t);
-  setTimeout(()=> t.style.opacity = '0', 2800);
-  setTimeout(()=> t.remove(), 3200);
-}
-
-// ----------------------- UI building (WhatsApp-like) -----------------------
-function injectStylesIfMissing() {
+// ----------------------- UI Building -----------------------
+function injectStyles() {
   if (document.getElementById('admin-inline-styles')) return;
   const s = document.createElement('style');
   s.id = 'admin-inline-styles';
   s.textContent = `
-    /* minimal local ADMIN CSS overrides to work with your style.css */
-    body { margin:0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
-    .wa-root { display:flex; min-height:100vh; gap:18px; background:var(--bg); color:var(--text); padding:18px; }
-    .wa-sidebar{ width:300px; background: #fff; border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.06); }
-    .wa-main{ flex:1; }
-    .wa-card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:14px; box-shadow: var(--soft-shadow); border:1px solid rgba(255,255,255,0.03); }
-    .muted{ color:var(--muted); font-size:13px; }
-    .menu button{ display:block; width:100%; text-align:left; margin-bottom:6px; padding:8px 10px; border-radius:8px; border:0; background:transparent; cursor:pointer; }
-    .menu button.active{ background:var(--accent); color:#fff; }
-    .course-item{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:8px; background:var(--glass); border:1px solid rgba(255,255,255,0.03); margin-bottom:8px; }
-    input,textarea,select{ width:100%; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text); margin-bottom:8px; }
-    .btn { padding:8px 12px; border-radius:8px; cursor:pointer; background:var(--accent); color:white; border:0 }
-    .btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--text) }
-    @media (max-width:900px){ .wa-root{ flex-direction:column; padding:12px } .wa-sidebar{ width:100% } }
+    :root {
+      --bg: #f0f2f5;
+      --sidebar-bg: #fff;
+      --card-bg: #fff;
+      --text: #111b21;
+      --muted: #667781;
+      --accent: #25d366;
+      --border: #e9edef;
+      --hover: #f5f6f6;
+    }
+    
+    body.dark-mode {
+      --bg: #0b141a;
+      --sidebar-bg: #1e2b32;
+      --card-bg: #1e2b32;
+      --text: #e9edef;
+      --muted: #8696a0;
+      --border: #2a3942;
+      --hover: #2a3942;
+    }
+    
+    body { margin:0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    .wa-root { display:flex; min-height:100vh; }
+    .wa-sidebar { width: 300px; background: var(--sidebar-bg); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; }
+    .wa-main { flex: 1; padding: 20px; overflow-y: auto; }
+    .wa-card { background: var(--card-bg); border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); }
+    .breadcrumb { display: flex; gap: 8px; align-items: center; margin-bottom: 20px; color: var(--muted); font-size: 14px; }
+    .breadcrumb span { cursor: pointer; }
+    .breadcrumb span:hover { color: var(--accent); }
+    .list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 8px; background: var(--hover); margin-bottom: 8px; cursor: pointer; transition: background 0.2s; }
+    .list-item:hover { background: var(--border); }
+    .badge { background: var(--accent); color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+    .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; transition: opacity 0.2s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-sm { padding: 4px 12px; font-size: 13px; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .mt-3 { margin-top: 12px; }
+    input, textarea, select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); margin-bottom: 12px; box-sizing: border-box; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--card-bg); border-radius: 12px; padding: 20px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+    .question-item { padding: 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+    .option-list { margin-left: 20px; }
+    .option-list li.correct { color: var(--accent); font-weight: bold; }
   `;
   document.head.appendChild(s);
 }
 
-// Build DOM skeleton
 function buildShell() {
-  injectStylesIfMissing();
+  injectStyles();
   document.body.innerHTML = '';
+  
   const root = el('div', { class: 'wa-root' });
-  const sidebar = el('aside', { class: 'wa-sidebar wa-card' });
-  const main = el('main', { class: 'wa-main' });
-
-  // sidebar content
-  sidebar.append(
-    el('div', { class: 'brand', html: `<div style="display:flex;gap:10px;align-items:center;"><div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent));display:grid;place-items:center;color:#fff;font-weight:700">WA</div><div><div style="font-weight:700;color:var(--accent)">Admin Panel</div><div class="muted" style="font-size:12px">Kelola soal & data</div></div></div>` }),
-    el('div', { class: 'wa-card', html: `<div id="authBox"><div id="adminInfo" class="muted">Belum login</div><form id="loginForm" class="stack" style="margin-top:8px"><input id="loginEmail" placeholder="Email admin" type="email"/><input id="loginPass" placeholder="Password" type="password"/><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="submit">Masuk</button></div></form><div style="display:flex;gap:8px;margin-top:8px"><button id="btnLogout" class="btn ghost" style="display:none">Logout</button></div></div>` }),
-    el('div', { class: 'wa-card', style: 'margin-top:12px', html: `<h4 class="muted">Menu</h4><div class="menu" id="leftMenu"><button data-view="dashboard" class="active">Dashboard</button><button data-view="courses">Mata Kuliah</button><button data-view="peserta">Peserta</button><button data-view="skor">Skor</button></div>` })
+  
+  // Sidebar
+  const sidebar = el('div', { class: 'wa-sidebar' }, 
+    el('div', { class: 'wa-card' }, 
+      el('h2', { style: 'margin-top: 0;' }, 'Admin Panel'),
+      el('div', { id: 'authBox' },
+        el('div', { id: 'adminInfo', class: 'muted' }, 'Belum login'),
+        el('form', { id: 'loginForm', class: 'mt-3' },
+          el('input', { id: 'loginEmail', placeholder: 'Email admin', type: 'email' }),
+          el('input', { id: 'loginPass', placeholder: 'Password', type: 'password' }),
+          el('button', { class: 'btn btn-primary', type: 'submit' }, 'Masuk')
+        ),
+        el('button', { id: 'btnLogout', class: 'btn btn-secondary mt-3', style: 'display: none;' }, 'Logout')
+      )
+    ),
+    el('div', { class: 'wa-card' },
+      el('h4', {}, 'Navigasi'),
+      el('div', { id: 'navigation' },
+        el('button', { class: 'btn btn-secondary', onclick: () => navigateTo('mata-kuliah') }, 'Mata Kuliah'),
+        el('button', { class: 'btn btn-secondary', onclick: () => navigateTo('peserta') }, 'Peserta'),
+        el('button', { class: 'btn btn-secondary', onclick: () => navigateTo('skor') }, 'Skor')
+      )
+    )
   );
-
-  // main content topbar + container
-  main.append(
-    el('div', { class:'wa-topbar', html: `<div><h2 id="mainTitle" style="margin:0">Dashboard Admin</h2><div id="mainSubtitle" class="muted">Ringkasan data</div></div><div><button id="btnRefresh" class="btn ghost">Refresh</button> <button id="btnNewCourse" class="btn" style="margin-left:8px">Tambah Course</button></div>` }),
-    el('section', { id:'mainContent', class:'wa-card', html: `<div id="contentInner">Memuat...</div>` })
+  
+  // Main Content
+  const main = el('div', { class: 'wa-main' },
+    el('div', { id: 'breadcrumb', class: 'breadcrumb' }),
+    el('div', { id: 'mainTitle', style: 'font-size: 24px; margin-bottom: 20px;' }, 'Dashboard'),
+    el('div', { id: 'content', class: 'wa-card' })
   );
-
+  
   root.append(sidebar, main);
   document.body.appendChild(root);
-
-  // attach events
-  qsa('.menu button').forEach(b => b.addEventListener('click', (ev) => {
-    qsa('.menu button').forEach(x => x.classList.remove('active'));
-    ev.currentTarget.classList.add('active');
-    navigateToView(ev.currentTarget.dataset.view);
-  }));
-  qs('#loginForm').addEventListener('submit', async (ev) => { ev.preventDefault(); await handleLogin(qs('#loginEmail').value.trim(), qs('#loginPass').value); });
-  qs('#btnLogout').addEventListener('click', async () => { await handleLogout(); });
-  qs('#btnRefresh').addEventListener('click', () => refreshAndRender());
-  qs('#btnNewCourse').addEventListener('click', () => openCourseEditor());
-}
-
-// ----------------------- Views & render -----------------------
-let APP = { user:null, courses:[], participants:[], scores:[] };
-
-async function navigateToView(view) {
-  qs('#mainTitle').textContent = view === 'dashboard' ? 'Dashboard Admin' : view === 'courses' ? 'Mata Kuliah' : view === 'peserta' ? 'Peserta' : 'Skor';
-  await renderView(view);
-}
-
-async function renderView(view='dashboard') {
-  const container = qs('#contentInner');
-  container.innerHTML = 'Memuat...';
-  if (view === 'dashboard') return renderDashboard(container);
-  if (view === 'courses') return renderCourses(container);
-  if (view === 'peserta') return renderPeserta(container);
-  if (view === 'skor') return renderSkor(container);
-  container.innerHTML = 'Tidak ada view';
-}
-
-async function renderDashboard(container) {
-  const ccount = APP.courses.length;
-  const qcount = APP.courses.reduce((t,c)=> t + (Array.isArray(c.questions)?c.questions.length:0),0);
-  const pcount = APP.participants.length;
-  const scount = APP.scores.length;
-  container.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap"><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${ccount}</div><div class="muted">Mata Kuliah</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${qcount}</div><div class="muted">Total Soal</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${pcount}</div><div class="muted">Peserta</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${scount}</div><div class="muted">Skor</div></div></div><div style="margin-top:12px" class="wa-card"><h4 class="muted">Latest Courses</h4><div id="latestCourses" style="margin-top:8px"></div></div>`;
-  const list = qs('#latestCourses');
-  list.innerHTML = '';
-  APP.courses.slice(0,6).forEach(c => {
-    const item = el('div', { class: 'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(c.name||'')[0]||'C'}</div><div style="margin-left:8px"><div style="font-weight:600">${c.name}</div><div class="muted">${(c.questions||[]).length} soal</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${c.id}" data-act="view">Buka</button> <button class="btn" data-id="${c.id}" data-act="edit">Edit</button>` }));
-    list.appendChild(item);
-    item.querySelector('[data-act="view"]').addEventListener('click', ()=> openCourseViewer(c));
-    item.querySelector('[data-act="edit"]').addEventListener('click', ()=> openCourseEditor(c));
+  
+  // Event Listeners
+  qs('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await handleLogin(qs('#loginEmail').value.trim(), qs('#loginPass').value);
+  });
+  
+  qs('#btnLogout').addEventListener('click', async () => {
+    await handleLogout();
   });
 }
 
-async function renderCourses(container) {
-  container.innerHTML = `<h3>Daftar Mata Kuliah</h3><div id="coursesList" style="margin-top:12px"></div>`;
-  const listEl = qs('#coursesList');
-  listEl.innerHTML = '';
-  if (!APP.courses || APP.courses.length === 0) { listEl.innerHTML = '<div class="muted">Belum ada course. Klik "Tambah Course".</div>'; return; }
-  APP.courses.forEach(c => {
-    const it = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(c.name||'')[0]||'C'}</div><div style="margin-left:8px"><div style="font-weight:600">${c.name}</div><div class="muted">${(c.questions||[]).length} soal</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${c.id}" data-act="view">View</button> <button class="btn" data-id="${c.id}" data-act="edit">Edit</button> <button class="btn ghost" data-id="${c.id}" data-act="delete">Delete</button>` }) );
-    listEl.appendChild(it);
-    it.querySelector('[data-act="view"]').addEventListener('click', ()=> openCourseViewer(c));
-    it.querySelector('[data-act="edit"]').addEventListener('click', ()=> openCourseEditor(c));
-    it.querySelector('[data-act="delete"]').addEventListener('click', async ()=> {
-      if (!confirm('Hapus course ini?')) return;
-      await deleteCourse(c.id);
-      await refreshAndRender();
-    });
+// ----------------------- Navigation & Views -----------------------
+function updateBreadcrumb(path = []) {
+  const breadcrumb = qs('#breadcrumb');
+  const items = [
+    el('span', { onclick: () => navigateTo('mata-kuliah') }, 'Home')
+  ];
+  
+  path.forEach((item, index) => {
+    items.push(el('span', {}, '›'));
+    items.push(el('span', { 
+      onclick: item.onClick || null 
+    }, item.name));
+  });
+  
+  breadcrumb.innerHTML = '';
+  items.forEach(item => breadcrumb.appendChild(item));
+}
+
+async function navigateTo(view, params = {}) {
+  const content = qs('#content');
+  const title = qs('#mainTitle');
+  
+  switch(view) {
+    case 'mata-kuliah':
+      title.textContent = 'Mata Kuliah';
+      await renderMataKuliah(content);
+      updateBreadcrumb();
+      break;
+      
+    case 'courses':
+      title.textContent = 'Courses - ' + (APP.currentMataKuliah?.name || '');
+      await renderCourses(content, params.mataKuliahId);
+      updateBreadcrumb([
+        { name: APP.currentMataKuliah?.name, onClick: () => navigateTo('mata-kuliah') }
+      ]);
+      break;
+      
+    case 'soal':
+      title.textContent = 'Soal - ' + (APP.currentCourse?.name || '');
+      await renderSoal(content, params.mataKuliahId, params.courseId);
+      updateBreadcrumb([
+        { name: APP.currentMataKuliah?.name, onClick: () => navigateTo('mata-kuliah') },
+        { name: APP.currentCourse?.name, onClick: () => navigateTo('courses', { mataKuliahId: params.mataKuliahId }) }
+      ]);
+      break;
+      
+    case 'peserta':
+      title.textContent = 'Peserta';
+      await renderPeserta(content);
+      updateBreadcrumb([{ name: 'Peserta' }]);
+      break;
+      
+    case 'skor':
+      title.textContent = 'Skor';
+      await renderSkor(content);
+      updateBreadcrumb([{ name: 'Skor' }]);
+      break;
+  }
+}
+
+// ----------------------- Render Functions -----------------------
+async function renderMataKuliah(container) {
+  const mataKuliah = await fetchMataKuliah();
+  APP.mataKuliah = mataKuliah;
+  
+  container.innerHTML = '';
+  container.appendChild(
+    el('div', { class: 'flex-between' },
+      el('h3', {}, 'Daftar Mata Kuliah'),
+      el('button', { class: 'btn btn-primary', onclick: () => openModalMataKuliah() }, '+ Tambah Mata Kuliah')
+    )
+  );
+  
+  if (mataKuliah.length === 0) {
+    container.appendChild(el('p', { class: 'muted' }, 'Belum ada mata kuliah'));
+    return;
+  }
+  
+  mataKuliah.forEach(mk => {
+    const item = el('div', { class: 'list-item' },
+      el('div', {},
+        el('strong', {}, mk.name),
+        el('div', { class: 'muted' }, mk.description || 'Tidak ada deskripsi')
+      ),
+      el('div', { style: 'display: flex; gap: 8px; align-items: center;' },
+        el('span', { class: 'badge' }, `${mk.totalCourses || 0} courses`),
+        el('button', { class: 'btn btn-sm', onclick: () => {
+          APP.currentMataKuliah = mk;
+          navigateTo('courses', { mataKuliahId: mk.id });
+        } }, 'Buka'),
+        el('button', { class: 'btn btn-sm btn-secondary', onclick: () => openModalMataKuliah(mk) }, 'Edit'),
+        el('button', { class: 'btn btn-sm btn-secondary', onclick: () => deleteMataKuliah(mk.id) }, 'Hapus')
+      )
+    );
+    container.appendChild(item);
+  });
+}
+
+async function renderCourses(container, mataKuliahId) {
+  const courses = await fetchCourses(mataKuliahId);
+  APP.courses = courses;
+  
+  container.innerHTML = '';
+  container.appendChild(
+    el('div', { class: 'flex-between' },
+      el('h3', {}, 'Daftar Course'),
+      el('button', { class: 'btn btn-primary', onclick: () => openModalCourse(mataKuliahId) }, '+ Tambah Course')
+    )
+  );
+  
+  if (courses.length === 0) {
+    container.appendChild(el('p', { class: 'muted' }, 'Belum ada course dalam mata kuliah ini'));
+    return;
+  }
+  
+  courses.forEach(course => {
+    const item = el('div', { class: 'list-item' },
+      el('div', {},
+        el('strong', {}, course.name),
+        el('div', { class: 'muted' }, course.description || 'Tidak ada deskripsi')
+      ),
+      el('div', { style: 'display: flex; gap: 8px; align-items: center;' },
+        el('span', { class: 'badge' }, `${course.totalSoal || 0} soal`),
+        el('button', { class: 'btn btn-sm', onclick: () => {
+          APP.currentCourse = course;
+          navigateTo('soal', { mataKuliahId, courseId: course.id });
+        } }, 'Buka Soal'),
+        el('button', { class: 'btn btn-sm btn-secondary', onclick: () => openModalCourse(mataKuliahId, course) }, 'Edit'),
+        el('button', { class: 'btn btn-sm btn-secondary', onclick: () => deleteCourse(mataKuliahId, course.id) }, 'Hapus')
+      )
+    );
+    container.appendChild(item);
+  });
+}
+
+async function renderSoal(container, mataKuliahId, courseId) {
+  const soal = await fetchSoal(mataKuliahId, courseId);
+  APP.soal = soal;
+  
+  container.innerHTML = '';
+  container.appendChild(
+    el('div', { class: 'flex-between' },
+      el('h3', {}, 'Daftar Soal'),
+      el('button', { class: 'btn btn-primary', onclick: () => openModalSoal(mataKuliahId, courseId) }, '+ Tambah Soal')
+    )
+  );
+  
+  if (soal.length === 0) {
+    container.appendChild(el('p', { class: 'muted' }, 'Belum ada soal dalam course ini'));
+    return;
+  }
+  
+  soal.forEach((s, index) => {
+    const item = el('div', { class: 'question-item' },
+      el('div', { class: 'flex-between' },
+        el('strong', {}, `Soal ${index + 1}`),
+        el('div', { style: 'display: flex; gap: 8px;' },
+          el('button', { class: 'btn btn-sm', onclick: () => openModalSoal(mataKuliahId, courseId, s) }, 'Edit'),
+          el('button', { class: 'btn btn-sm btn-secondary', onclick: () => deleteSoal(mataKuliahId, courseId, s.id) }, 'Hapus')
+        )
+      ),
+      el('p', {}, s.pertanyaan || s.question),
+      el('ol', { class: 'option-list' },
+        ...Object.entries(s.pilihan || s.options || {}).map(([key, value]) =>
+          el('li', { class: (s.jawaban === key || s.correct === key) ? 'correct' : '' }, 
+            `${key}. ${value}`
+          )
+        )
+      ),
+      s.explanation && el('div', { class: 'muted' }, `Penjelasan: ${s.explanation}`)
+    );
+    container.appendChild(item);
   });
 }
 
 async function renderPeserta(container) {
-  container.innerHTML = `<h3>Peserta</h3><div id="pesertaList" style="margin-top:12px"></div>`;
-  const l = qs('#pesertaList'); l.innerHTML = '';
-  if (!APP.participants || APP.participants.length === 0) { l.innerHTML = '<div class="muted">Belum ada peserta.</div>'; return; }
+  try {
+    const snap = await getDocs(collection(db, 'peserta'));
+    APP.participants = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    APP.participants = [];
+  }
+  
+  container.innerHTML = el('h3', {}, 'Daftar Peserta').outerHTML;
+  
+  if (APP.participants.length === 0) {
+    container.innerHTML += '<p class="muted">Belum ada peserta</p>';
+    return;
+  }
+  
   APP.participants.forEach(p => {
-    const item = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(p.name||p.email||'U')[0]}</div><div style="margin-left:8px"><div style="font-weight:600">${p.name||p.email}</div><div class="muted">${p.email||''}</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${p.id}" data-act="delete">Hapus</button>` }) );
-    l.appendChild(item);
-    item.querySelector('[data-act="delete"]').addEventListener('click', ()=> { alert('Hapus peserta belum diimplementasikan via UI — saya bisa tambahkan jika mau.'); });
+    container.appendChild(
+      el('div', { class: 'list-item' },
+        el('div', {},
+          el('strong', {}, p.name || p.email),
+          el('div', { class: 'muted' }, p.email || 'No email')
+        )
+      )
+    );
   });
 }
 
 async function renderSkor(container) {
-  container.innerHTML = `<h3>Skor</h3><div id="skorList" style="margin-top:12px"></div>`;
-  const l = qs('#skorList'); l.innerHTML = '';
-  if (!APP.scores || APP.scores.length === 0) { l.innerHTML = '<div class="muted">Belum ada skor.</div>'; return; }
-  APP.scores.forEach(s => {
-    const time = s.createdAt && s.createdAt.seconds ? new Date(s.createdAt.seconds*1000).toLocaleString() : new Date().toLocaleString();
-    const item = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${s.score||0}</div><div style="margin-left:8px"><div style="font-weight:600">${s.participantId||'Peserta'}</div><div class="muted">${s.courseId||''}</div></div>` }), el('div', { html: time }) );
-    l.appendChild(item);
-  });
-}
-
-// ----------------------- Modal helpers -----------------------
-let modalRoot = null;
-function openModal(html) {
-  if (!modalRoot) { modalRoot = el('div', { id:'wa_modal_root' }); document.body.appendChild(modalRoot); }
-  modalRoot.innerHTML = `<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);z-index:9999;"><div style="width:100%;max-width:900px;padding:14px">${html}</div></div>`;
-  modalRoot.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
-}
-function closeModal() { if (modalRoot) modalRoot.innerHTML = ''; }
-
-// ----------------------- Course viewer/editor -----------------------
-function openCourseViewer(course) {
-  const html = `<div class="wa-card"><h3>${escapeHTML(course.name)}</h3><div style="margin-top:8px">${(course.questions||[]).map((q,idx)=>`<div style="margin-bottom:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02)"><div style="font-weight:600">${idx+1}. ${escapeHTML(q.question)}</div><div class="muted" style="margin-top:6px">${Object.entries(q.options||{}).map(([k,v])=>k+': '+escapeHTML(v)).join(' | ')}</div>${q.explanation?`<div style="margin-top:6px;color:#6b7280">${escapeHTML(q.explanation)}</div>`:''}</div>`).join('')}</div><div style="margin-top:10px"><button data-close class="btn ghost">Tutup</button></div></div>`;
-  openModal(html);
-}
-
-function openCourseEditor(course=null) {
-  const isEdit = !!course;
-  const html = `<div class="wa-card"><h3>${isEdit ? 'Edit Course' : 'Tambah Course'}</h3>
-    <div style="margin-top:10px">
-      <label>Nama</label><input id="ce_name" value="${isEdit?escapeHTML(course.name):''}" />
-      <label>Deskripsi</label><input id="ce_desc" value="${isEdit?escapeHTML(course.description||''):''}" />
-      <hr />
-      <h4>Tambah Soal Baru</h4>
-      <label>Pertanyaan</label><textarea id="q_new_text"></textarea>
-      <div style="display:flex;gap:8px"><input id="q_opt_a" placeholder="Opsi A"/><input id="q_opt_b" placeholder="Opsi B"/></div>
-      <div style="display:flex;gap:8px;margin-top:8px"><input id="q_opt_c" placeholder="Opsi C"/><input id="q_opt_d" placeholder="Opsi D"/></div>
-      <label>Jawaban benar (A/B/C/D)</label><input id="q_new_correct" placeholder="A"/>
-      <label>Penjelasan (opsional)</label><input id="q_new_explain" />
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button data-close class="btn ghost">Batal</button>
-        <button id="ce_save" class="btn">${isEdit ? 'Simpan' : 'Buat'}</button>
-      </div>
-    </div></div>`;
-  openModal(html);
-  qs('#ce_save').addEventListener('click', async () => {
-    const name = qs('#ce_name').value.trim();
-    if (!name) return alert('Nama course wajib diisi.');
-    const desc = qs('#ce_desc').value.trim();
-    const qtext = qs('#q_new_text').value.trim();
-    const options = { A: qs('#q_opt_a').value.trim(), B: qs('#q_opt_b').value.trim(), C: qs('#q_opt_c').value.trim(), D: qs('#q_opt_d').value.trim() };
-    const correct = (qs('#q_new_correct').value.trim().toUpperCase() || 'A');
-    const qExplain = qs('#q_new_explain').value.trim();
-    const newQ = qtext ? { id: makeId('q-'), question: qtext, options: Object.fromEntries(Object.entries(options).filter(([k,v])=>v)), correct, explanation: qExplain } : null;
-
-    try {
-      if (!isEdit) {
-        const newCourse = { id: makeId('local-'), name, description: desc, questions: newQ ? [newQ] : [] };
-        const res = await saveCourseRemote(newCourse);
-        if (res.success) toast('Course dibuat (remote).','success');
-        else {
-          // fallback local
-          const local = readLocalData();
-          local.courses.push(newCourse);
-          writeLocalData(local);
-          toast('Course dibuat lokal (firestore error).','error');
-        }
-      } else {
-        // if course id looks remote update remote
-        if (!String(course.id).startsWith('local-')) {
-          if (newQ) { // push question
-            // naive approach: fetch doc, update questions array on remote
-            const snap = await getDoc(doc(db, "courses", course.id));
-            if (snap.exists()) {
-              const data = snap.data();
-              const qs = Array.isArray(data.questions)?data.questions:[];
-              qs.push(newQ);
-              await updateCourseRemote(course.id, { questions: qs });
-            }
-          }
-          await updateCourseRemote(course.id, { name, description: desc });
-          toast('Perubahan disimpan (remote).','success');
-        } else {
-          const local = readLocalData();
-          const c = local.courses.find(x=>x.id===course.id);
-          if (c) { c.name = name; c.description = desc; if (newQ) c.questions = c.questions||[], c.questions.push(newQ); writeLocalData(local); }
-          toast('Perubahan disimpan (lokal).','success');
-        }
-      }
-    } catch (err) {
-      console.error(err); toast('Error saat menyimpan','error');
-    } finally {
-      closeModal(); await refreshAndRender();
-    }
-  });
-}
-
-// ----------------------- Data loading & refresh -----------------------
-async function refreshAndRender() {
-  // attempt remote first; if remote fails, fallback to local
-  const remote = await fetchCoursesRemote();
-  if (remote && Array.isArray(remote)) {
-    APP.courses = remote.map(r => ({ id: r.id, name: r.name, description: r.description || '', questions: Array.isArray(r.questions)?r.questions:r.questions || [] }));
-  } else {
-    const local = readLocalData();
-    APP.courses = local.courses || [];
+  try {
+    const snap = await getDocs(collection(db, 'scores'));
+    APP.scores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    APP.scores = [];
   }
-
-  // participants and scores naive fetch (no fallback)
-  try { const ps = await getDocs(collection(db,'peserta')); APP.participants = ps.docs.map(d=>({ id:d.id, ...d.data() })); } catch(e){ APP.participants = []; }
-  try { const ss = await getDocs(collection(db,'scores')); APP.scores = ss.docs.map(d=>({ id:d.id, ...d.data() })); } catch(e){ APP.scores = []; }
-
-  // render current view
-  const active = qs('.menu button.active')?.dataset.view || 'dashboard';
-  await renderView(active);
-  qs('#mainSubtitle').textContent = 'Ringkasan data • terakhir disegarkan: ' + new Date().toLocaleTimeString();
-}
-
-// ----------------------- Delete course wrapper -----------------------
-async function deleteCourse(id) {
-  if (String(id).startsWith('local-')) {
-    const local = readLocalData();
-    local.courses = local.courses.filter(c => c.id !== id);
-    writeLocalData(local);
+  
+  container.innerHTML = el('h3', {}, 'Daftar Skor').outerHTML;
+  
+  if (APP.scores.length === 0) {
+    container.innerHTML += '<p class="muted">Belum ada skor</p>';
     return;
   }
-  const res = await deleteCourseRemote(id);
-  if (res.success) toast('Course dihapus (remote)','success');
-  else {
-    const local = readLocalData();
-    local.courses = local.courses.filter(c => c.id !== id);
-    writeLocalData(local);
-    toast('Course dihapus (lokal)','error');
+  
+  APP.scores.forEach(s => {
+    container.appendChild(
+      el('div', { class: 'list-item' },
+        el('div', {},
+          el('strong', {}, `Score: ${s.score || 0}`),
+          el('div', { class: 'muted' }, `Course: ${s.courseId || 'Unknown'}`)
+        ),
+        el('div', { class: 'muted' }, 
+          new Date(s.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString()
+        )
+      )
+    );
+  });
+}
+
+// ----------------------- Modal Functions -----------------------
+function openModalMataKuliah(mataKuliah = null) {
+  const isEdit = !!mataKuliah;
+  const modal = el('div', { class: 'modal-overlay', onclick: (e) => e.target === e.currentTarget && e.currentTarget.remove() },
+    el('div', { class: 'modal' },
+      el('h3', {}, isEdit ? 'Edit Mata Kuliah' : 'Tambah Mata Kuliah'),
+      el('input', { id: 'modalMataKuliahName', placeholder: 'Nama Mata Kuliah', value: mataKuliah?.name || '' }),
+      el('textarea', { id: 'modalMataKuliahDesc', placeholder: 'Deskripsi', rows: 3 }, mataKuliah?.description || ''),
+      el('div', { style: 'display: flex; gap: 8px; justify-content: flex-end;' },
+        el('button', { class: 'btn btn-secondary', onclick: () => modal.parentElement.remove() }, 'Batal'),
+        el('button', { class: 'btn btn-primary', onclick: async () => {
+          const name = qs('#modalMataKuliahName').value.trim();
+          const description = qs('#modalMataKuliahDesc').value.trim();
+          
+          if (!name) {
+            toast('Nama mata kuliah harus diisi', 'error');
+            return;
+          }
+          
+          if (isEdit) {
+            const result = await updateMataKuliahRemote(mataKuliah.id, { nama: name, description });
+            if (result.success) {
+              toast('Mata kuliah berhasil diupdate', 'success');
+              modal.parentElement.remove();
+              await navigateTo('mata-kuliah');
+            } else {
+              toast('Gagal mengupdate mata kuliah', 'error');
+            }
+          } else {
+            const result = await saveMataKuliahRemote({ name, description });
+            if (result.success) {
+              toast('Mata kuliah berhasil ditambahkan', 'success');
+              modal.parentElement.remove();
+              await navigateTo('mata-kuliah');
+            } else {
+              toast('Gagal menambahkan mata kuliah', 'error');
+            }
+          }
+        } }, isEdit ? 'Update' : 'Simpan')
+      )
+    )
+  );
+  
+  document.body.appendChild(modal);
+}
+
+function openModalCourse(mataKuliahId, course = null) {
+  const isEdit = !!course;
+  const modal = el('div', { class: 'modal-overlay', onclick: (e) => e.target === e.currentTarget && e.currentTarget.remove() },
+    el('div', { class: 'modal' },
+      el('h3', {}, isEdit ? 'Edit Course' : 'Tambah Course'),
+      el('input', { id: 'modalCourseName', placeholder: 'Nama Course', value: course?.name || '' }),
+      el('textarea', { id: 'modalCourseDesc', placeholder: 'Deskripsi', rows: 3 }, course?.description || ''),
+      el('div', { style: 'display: flex; gap: 8px; justify-content: flex-end;' },
+        el('button', { class: 'btn btn-secondary', onclick: () => modal.parentElement.remove() }, 'Batal'),
+        el('button', { class: 'btn btn-primary', onclick: async () => {
+          const name = qs('#modalCourseName').value.trim();
+          const description = qs('#modalCourseDesc').value.trim();
+          
+          if (!name) {
+            toast('Nama course harus diisi', 'error');
+            return;
+          }
+          
+          if (isEdit) {
+            const result = await updateDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", course.id), {
+              nama: name,
+              description
+            });
+            toast('Course berhasil diupdate', 'success');
+          } else {
+            const result = await saveCourseRemote(mataKuliahId, { name, description });
+            if (result.success) {
+              toast('Course berhasil ditambahkan', 'success');
+            } else {
+              toast('Gagal menambahkan course', 'error');
+            }
+          }
+          
+          modal.parentElement.remove();
+          await navigateTo('courses', { mataKuliahId });
+        } }, isEdit ? 'Update' : 'Simpan')
+      )
+    )
+  );
+  
+  document.body.appendChild(modal);
+}
+
+function openModalSoal(mataKuliahId, courseId, soal = null) {
+  const isEdit = !!soal;
+  const modal = el('div', { class: 'modal-overlay', onclick: (e) => e.target === e.currentTarget && e.currentTarget.remove() },
+    el('div', { class: 'modal' },
+      el('h3', {}, isEdit ? 'Edit Soal' : 'Tambah Soal'),
+      el('textarea', { id: 'modalSoalQuestion', placeholder: 'Pertanyaan', rows: 3 }, soal?.pertanyaan || soal?.question || ''),
+      el('h4', {}, 'Pilihan Jawaban:'),
+      el('input', { id: 'modalSoalA', placeholder: 'Pilihan A', value: soal?.pilihan?.A || soal?.options?.A || '' }),
+      el('input', { id: 'modalSoalB', placeholder: 'Pilihan B', value: soal?.pilihan?.B || soal?.options?.B || '' }),
+      el('input', { id: 'modalSoalC', placeholder: 'Pilihan C', value: soal?.pilihan?.C || soal?.options?.C || '' }),
+      el('input', { id: 'modalSoalD', placeholder: 'Pilihan D', value: soal?.pilihan?.D || soal?.options?.D || '' }),
+      el('select', { id: 'modalSoalCorrect' },
+        ['A', 'B', 'C', 'D'].map(opt => 
+          el('option', { value: opt, selected: (soal?.jawaban === opt || soal?.correct === opt) }, `Jawaban ${opt}`)
+        )
+      ),
+      el('textarea', { id: 'modalSoalExplanation', placeholder: 'Penjelasan (opsional)', rows: 2 }, soal?.explanation || ''),
+      el('div', { style: 'display: flex; gap: 8px; justify-content: flex-end;' },
+        el('button', { class: 'btn btn-secondary', onclick: () => modal.parentElement.remove() }, 'Batal'),
+        el('button', { class: 'btn btn-primary', onclick: async () => {
+          const question = qs('#modalSoalQuestion').value.trim();
+          const pilihan = {
+            A: qs('#modalSoalA').value.trim(),
+            B: qs('#modalSoalB').value.trim(),
+            C: qs('#modalSoalC').value.trim(),
+            D: qs('#modalSoalD').value.trim()
+          };
+          const jawaban = qs('#modalSoalCorrect').value;
+          const explanation = qs('#modalSoalExplanation').value.trim();
+          
+          if (!question || !pilihan.A || !pilihan.B || !pilihan.C || !pilihan.D || !jawaban) {
+            toast('Semua field harus diisi kecuali penjelasan', 'error');
+            return;
+          }
+          
+          const soalData = {
+            pertanyaan: question,
+            pilihan: pilihan,
+            jawaban: jawaban,
+            explanation: explanation
+          };
+          
+          if (isEdit) {
+            await updateDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal", soal.id), soalData);
+            toast('Soal berhasil diupdate', 'success');
+          } else {
+            const result = await saveSoalRemote(mataKuliahId, courseId, soalData);
+            if (result.success) {
+              toast('Soal berhasil ditambahkan', 'success');
+            } else {
+              toast('Gagal menambahkan soal', 'error');
+            }
+          }
+          
+          modal.parentElement.remove();
+          await navigateTo('soal', { mataKuliahId, courseId });
+        } }, isEdit ? 'Update' : 'Simpan')
+      )
+    )
+  );
+  
+  document.body.appendChild(modal);
+}
+
+// ----------------------- Delete Functions -----------------------
+async function deleteMataKuliah(id) {
+  if (!confirm('Hapus mata kuliah ini? Semua course dan soal di dalamnya juga akan terhapus.')) return;
+  
+  const result = await deleteMataKuliahRemote(id);
+  if (result.success) {
+    toast('Mata kuliah berhasil dihapus', 'success');
+    await navigateTo('mata-kuliah');
+  } else {
+    toast('Gagal menghapus mata kuliah', 'error');
   }
 }
 
-// ----------------------- Auth handlers -----------------------
+async function deleteCourse(mataKuliahId, courseId) {
+  if (!confirm('Hapus course ini? Semua soal di dalamnya juga akan terhapus.')) return;
+  
+  const result = await deleteCourseRemote(mataKuliahId, courseId);
+  if (result.success) {
+    toast('Course berhasil dihapus', 'success');
+    await navigateTo('courses', { mataKuliahId });
+  } else {
+    toast('Gagal menghapus course', 'error');
+  }
+}
+
+async function deleteSoal(mataKuliahId, courseId, soalId) {
+  if (!confirm('Hapus soal ini?')) return;
+  
+  const result = await deleteSoalRemote(mataKuliahId, courseId, soalId);
+  if (result.success) {
+    toast('Soal berhasil dihapus', 'success');
+    await navigateTo('soal', { mataKuliahId, courseId });
+  } else {
+    toast('Gagal menghapus soal', 'error');
+  }
+}
+
+// ----------------------- Auth Handlers -----------------------
 async function handleLogin(email, password) {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const user = cred.user;
     const ok = await isAdminUid(user.uid);
+    
     if (!ok) {
-      toast('Akun tidak memiliki akses admin','error');
+      toast('Akun tidak memiliki akses admin', 'error');
       await signOut(auth);
       return;
     }
+    
     APP.user = user;
-    qs('#adminInfo').textContent = user.email || 'Admin';
-    qs('#btnLogout').style.display = '';
+    qs('#adminInfo').textContent = `Admin: ${user.email}`;
     qs('#loginForm').style.display = 'none';
-    toast('Login berhasil','success');
-    await refreshAndRender();
+    qs('#btnLogout').style.display = 'block';
+    toast('Login berhasil', 'success');
+    await navigateTo('mata-kuliah');
   } catch (err) {
     console.error(err);
-    toast('Login gagal: cek email/password atau koneksi','error');
+    toast('Login gagal: cek email/password', 'error');
   }
 }
+
 async function handleLogout() {
-  try { await signOut(auth); } catch (e){ console.warn(e); }
-  APP.user = null;
-  qs('#adminInfo').textContent = 'Belum login';
-  qs('#btnLogout').style.display = 'none';
-  qs('#loginForm').style.display = '';
-  toast('Logout berhasil','info');
-  await refreshAndRender();
+  try {
+    await signOut(auth);
+    APP.user = null;
+    qs('#adminInfo').textContent = 'Belum login';
+    qs('#loginForm').style.display = 'block';
+    qs('#btnLogout').style.display = 'none';
+    toast('Logout berhasil', 'info');
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-// ----------------------- Auth listener (auto sign-out if not admin) -----------------------
+// ----------------------- Auth Listener -----------------------
 onAuthStateChanged(auth, async (user) => {
-  if (!user) { APP.user = null; qs('#adminInfo').textContent = 'Belum login'; qs('#btnLogout').style.display = 'none'; qs('#loginForm').style.display = ''; return; }
-  const ok = await isAdminUid(user.uid);
-  if (!ok) { await signOut(auth); toast('Akun tidak punya hak admin','error'); return; }
-  APP.user = user;
-  qs('#adminInfo').textContent = user.email || 'Admin';
-  qs('#btnLogout').style.display = '';
-  qs('#loginForm').style.display = 'none';
-  await refreshAndRender();
+  if (user) {
+    const ok = await isAdminUid(user.uid);
+    if (ok) {
+      APP.user = user;
+      qs('#adminInfo').textContent = `Admin: ${user.email}`;
+      qs('#loginForm').style.display = 'none';
+      qs('#btnLogout').style.display = 'block';
+      await navigateTo('mata-kuliah');
+    } else {
+      await signOut(auth);
+    }
+  } else {
+    APP.user = null;
+    qs('#adminInfo').textContent = 'Belum login';
+    qs('#loginForm').style.display = 'block';
+    qs('#btnLogout').style.display = 'none';
+  }
 });
 
 // ----------------------- Init -----------------------
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
   buildShell();
-  const local = readLocalData();
-  APP.courses = local.courses || [];
-  APP.participants = [];
-  APP.scores = [];
-  await refreshAndRender();
-  // dark-mode toggle via saved pref (simple)
-  if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark-mode');
+  
+  // Dark mode toggle
+  const darkModeToggle = el('button', {
+    style: 'position: fixed; bottom: 20px; right: 20px; padding: 10px; border-radius: 50%; background: var(--accent); color: white; border: none; cursor: pointer; z-index: 1000;'
+  }, '🌙');
+  
+  darkModeToggle.onclick = () => {
+    document.body.classList.toggle('dark-mode');
+    localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+    darkModeToggle.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+  };
+  
+  if (localStorage.getItem('darkMode') === 'true') {
+    document.body.classList.add('dark-mode');
+    darkModeToggle.textContent = '☀️';
+  }
+  
+  document.body.appendChild(darkModeToggle);
 });
 
-// ----------------------- Expose for debug -----------------------
-window.ADMIN_PANEL = { refresh: refreshAndRender, APP, auth, db };
+// ----------------------- Expose for Debug -----------------------
+window.ADMIN = {
+  APP,
+  auth,
+  db,
+  refresh: async () => {
+    await navigateTo('mata-kuliah');
+    toast('Data direfresh', 'info');
+  }
+};
