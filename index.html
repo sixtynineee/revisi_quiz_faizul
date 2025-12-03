@@ -8,6 +8,8 @@
 </head>
 <body>
     <div class="app">
+        
+        <!-- TOPBAR -->
         <header class="topbar">
             <h1>Quiz App</h1>
             <div class="top-actions">
@@ -18,29 +20,37 @@
 
         <main class="container">
 
-            <!-- LIST COURSE -->
+            <!-- ============= MATA KULIAH ============= -->
             <section class="card" id="coursesSection">
-                <h2>Daftar Soal</h2>
+                <h2>Mata Kuliah</h2>
                 <div id="coursesList" class="list"></div>
             </section>
 
-            <!-- QUIZ VIEW -->
-            <section class="card" id="quizSection" style="display:none;">
-                <h2 id="quizTitle"></h2>
-                <div id="quizContainer"></div>
-
-                <div class="actions-row" style="margin-top:18px;">
-                    <button class="btn primary" id="finishQuizBtn">Selesai</button>
-                    <button class="btn" id="backToCourses">Kembali</button>
-                </div>
+            <!-- ============= MATERI LIST ============= -->
+            <section class="card" id="materiSection" style="display:none;">
+                <h2>Materi</h2>
+                <div id="materiList" class="list"></div>
             </section>
 
-            <!-- RESULT VIEW -->
+            <!-- ============= QUIZ VIEW ============= -->
+            <section class="card" id="quizSection" style="display:none;">
+                <h2 id="quizTitle"></h2>
+
+                <!-- header: progress + selesai -->
+                <div id="quizHeader" style="margin-bottom:12px;"></div>
+                <div id="quizProgress" class="muted" style="margin-bottom:12px;"></div>
+
+                <div id="quizContainer"></div>
+            </section>
+
+            <!-- ============= RESULT VIEW ============= -->
             <section class="card" id="resultSection" style="display:none;">
                 <h2>Hasil</h2>
-                <div id="resultBox"></div>
-                <div class="actions-row">
-                    <button class="btn" id="backHome">Kembali ke daftar</button>
+                <div id="resultSection"></div>
+
+                <div class="actions-row" style="margin-top:18px;">
+                    <button class="btn" id="backToMateri">Kembali ke Materi</button>
+                    <button class="btn primary" id="retryBtn">Ulangi</button>
                 </div>
             </section>
 
@@ -49,8 +59,10 @@
         <footer class="footer">
             <small>Quiz App — User mode</small>
         </footer>
+
     </div>
 
-    <script type="module" src="user.js"></script>
+    <!-- SCRIPT -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>
