@@ -1,4 +1,4 @@
-// user.js - Quiz Page Script yang Disederhanakan
+// user.js - REVISI FINAL (Tanpa result.js)
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -29,10 +29,9 @@ const urlParams = new URLSearchParams(window.location.search);
 const mataKuliahId = urlParams.get('mataKuliah') || null;
 
 // State
-let currentMataKuliah = null;
 let currentCourse = null;
-let originalQuestions = []; // Menyimpan soal asli
-let randomizedQuestions = []; // Soal yang sudah diacak
+let originalQuestions = [];
+let randomizedQuestions = [];
 let currentQuestionIndex = 0;
 let userAnswers = {};
 let timer = 0;
@@ -42,15 +41,11 @@ let timerInterval = null;
 const pageTitle = document.getElementById('pageTitle');
 const pageSubtitle = document.getElementById('pageSubtitle');
 const coursesSection = document.getElementById('coursesSection');
-const coursesTitle = document.getElementById('coursesTitle');
-const coursesSubtitle = document.getElementById('coursesSubtitle');
 const coursesList = document.getElementById('coursesList');
 const backBtn = document.getElementById('backBtn');
 const quizSection = document.getElementById('quizSection');
-const quizTitle = document.getElementById('quizTitle');
 const quizProgress = document.getElementById('quizProgress');
 const quizContainer = document.getElementById('quizContainer');
-const timerBtn = document.getElementById('timerBtn');
 const timerDisplay = document.getElementById('timer');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
@@ -58,9 +53,8 @@ const finishBtn = document.getElementById('finishBtn');
 const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
 
-// ========== FUNGSI PENGACAKAN SEDERHANA ==========
+// ========== FUNGSI PENGACAKAN ==========
 
-// Fungsi untuk mengacak array
 function shuffleArray(array) {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -70,47 +64,37 @@ function shuffleArray(array) {
   return shuffled;
 }
 
-// Fungsi untuk menyiapkan quiz dengan pengacakan
 function prepareRandomizedQuiz(questions) {
   if (!questions || questions.length === 0) return [];
   
-  // 1. Acak urutan soal
+  // Acak urutan soal
   const shuffledQuestions = shuffleArray(questions);
   
-  // 2. Untuk setiap soal, acak pilihan jawabannya
-  const randomizedQuestions = shuffledQuestions.map((question, index) => {
+  // Untuk setiap soal, acak pilihan jawabannya
+  return shuffledQuestions.map(question => {
     const options = question.pilihan || question.options || {};
     const correctAnswer = question.jawaban || question.correct;
     
-    // Konversi pilihan ke array
     const optionsArray = Object.entries(options);
-    
-    // Jika tidak ada pilihan yang valid, return soal asli
-    if (optionsArray.length === 0) {
-      return question;
-    }
+    if (optionsArray.length === 0) return question;
     
     // Acak urutan pilihan
     const shuffledOptions = shuffleArray(optionsArray);
-    
-    // Cari jawaban benar yang baru setelah diacak
     let newCorrectAnswer = '';
     const newOptions = {};
     
-    // Rekonstruksi options dengan label baru (A, B, C, D)
+    // Rekonstruksi options dengan label baru
     shuffledOptions.forEach(([originalKey, value], idx) => {
-      const newKey = String.fromCharCode(65 + idx); // A, B, C, D
+      const newKey = String.fromCharCode(65 + idx);
       newOptions[newKey] = value;
       
-      // Jika ini adalah jawaban yang benar di data asli
       if (originalKey === correctAnswer) {
         newCorrectAnswer = newKey;
       }
     });
     
-    // Validasi: pastikan jawaban benar ditemukan
+    // Validasi
     if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
-      // Cari teks jawaban benar di pilihan baru
       const correctText = options[correctAnswer];
       Object.entries(newOptions).forEach(([key, value]) => {
         if (value === correctText) {
@@ -119,7 +103,6 @@ function prepareRandomizedQuiz(questions) {
       });
     }
     
-    // Return soal dengan pilihan yang sudah diacak
     return {
       ...question,
       pilihan: newOptions,
@@ -127,8 +110,6 @@ function prepareRandomizedQuiz(questions) {
       originalCorrectAnswer: correctAnswer
     };
   });
-  
-  return randomizedQuestions;
 }
 
 // ========== FUNGSI UTAMA ==========
@@ -152,7 +133,6 @@ async function loadCourses() {
   }
   
   try {
-    // Get mata kuliah info
     const coursesSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("nama", "asc")));
     const courses = coursesSnapshot.docs.map(doc => ({
       id: doc.id,
@@ -175,7 +155,6 @@ async function loadCourses() {
       return;
     }
     
-    // Render courses
     coursesList.innerHTML = courses.map(course => `
       <div class="course-item slide-in" style="animation-delay: ${courses.indexOf(course) * 0.1}s;">
         <div class="left">
@@ -224,7 +203,6 @@ async function loadCourses() {
 window.startQuiz = async function(courseId, courseName) {
   currentCourse = { id: courseId, name: courseName };
   
-  // Hide courses, show quiz
   coursesSection.style.display = 'none';
   quizSection.style.display = 'block';
   pageTitle.textContent = courseName;
@@ -232,7 +210,6 @@ window.startQuiz = async function(courseId, courseName) {
   backBtn.style.display = 'inline-flex';
   
   try {
-    // Load questions
     const questionsSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal")));
     originalQuestions = questionsSnapshot.docs.map(doc => ({
       id: doc.id,
@@ -258,7 +235,7 @@ window.startQuiz = async function(courseId, courseName) {
       return;
     }
     
-    // Siapkan soal dengan pengacakan
+    // Acak soal
     randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
     
     // Initialize quiz
@@ -310,15 +287,14 @@ function renderQuestion() {
       ${['A', 'B', 'C', 'D'].map(key => {
         const optionText = (question.pilihan || question.options || {})[key] || '';
         const isSelected = userAnswers[currentQuestionIndex] === key;
-        const isDisabled = !optionText || optionText.trim() === '';
         
-        if (isDisabled) return '';
+        if (!optionText || optionText.trim() === '') return '';
         
         return `
           <div class="choice ${isSelected ? 'selected' : ''}" 
                onclick="selectAnswer('${key}')">
             <span class="label">${key}.</span>
-            <span class="text">${optionText || `Pilihan ${key} kosong`}</span>
+            <span class="text">${optionText}</span>
             ${isSelected ? '<span style="color: #25D366; margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
           </div>
         `;
@@ -356,7 +332,7 @@ nextBtn.addEventListener('click', () => {
 finishBtn.addEventListener('click', finishQuiz);
 quitBtn.addEventListener('click', confirmQuit);
 
-// Finish Quiz - DISEDERHANAKAN
+// Finish Quiz
 async function finishQuiz() {
   // Stop timer
   if (timerInterval) {
@@ -380,7 +356,7 @@ async function finishQuiz() {
     
     const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
     
-    // Dapatkan teks dari semua pilihan
+    // Dapatkan semua pilihan
     const allOptions = [];
     for (const [key, value] of Object.entries(q.pilihan || {})) {
       allOptions.push(`${key}. ${value}`);
@@ -477,8 +453,6 @@ function initTheme() {
     document.documentElement.setAttribute('data-theme', 'light');
     themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
   }
-  
-  updateThemeIcon();
 }
 
 function toggleTheme() {
