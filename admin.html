@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Admin — Quiz Manager</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* cepat kecil untuk layout panel admin agar rapi di default */
+    .admin-panel { display:flex; gap:16px; align-items:flex-start; }
+    .admin-list { width:100%; display:flex; flex-direction:column; gap:12px; }
+    .admin-actions { display:flex; gap:8px; align-items:center; }
+    .admin-item { display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:8px; background:var(--card); border:1px solid var(--glass); }
+    .panel { display:none; margin-top:12px; }
+    .panel.active { display:block; }
+    .panel h3{ margin:0 0 8px 0 }
+  </style>
 </head>
 <body>
   <div class="app admin-app">
@@ -22,7 +32,7 @@
 
     <main class="container admin-container">
       <!-- Sidebar -->
-      <aside class="card left-panel wa-sidebar">
+      <aside class="card left-panel wa-sidebar" style="min-width:260px">
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
           <div class="badge" style="background:var(--accent);color:white">A</div>
           <div>
@@ -32,6 +42,7 @@
         </div>
 
         <div id="authBox">
+          <!-- (Optional) If you later wire auth, keep this form -->
           <form id="loginForm">
             <input id="loginEmail" placeholder="Email admin" type="email" />
             <input id="loginPass" placeholder="Password" type="password" />
@@ -63,27 +74,106 @@
       </aside>
 
       <!-- Main content -->
-      <section class="card right-panel wa-main">
+      <section class="card right-panel wa-main" style="flex:1">
         <div class="wa-topbar wa-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px">
           <div><h2 id="mainTitle" style="margin:0;font-size:18px">Dashboard</h2></div>
           <div>
             <button id="btnRefresh" class="btn ghost sm">↻ Refresh</button>
-            <button id="btnNewCourse" class="btn sm">+ Course Baru</button>
+            <button id="btnNewCourse" class="btn sm" onclick="document.getElementById('addCourseBtn')?.click()">+ Course Baru</button>
           </div>
         </div>
 
         <div id="mainContent" class="wa-card" style="padding:16px">
-          <div id="contentInner">Memuat data...</div>
+          <!-- Content area where admin-firebase.js will render lists -->
+          <div id="contentInner">
+            <!-- Dashboard default -->
+            <div id="dashboardView">
+              <h3>Dashboard</h3>
+              <p class="muted">Ringkasan singkat. Gunakan menu Mata Kuliah untuk mulai mengelola.</p>
+            </div>
+
+            <!-- Courses admin view (required by admin-firebase.js) -->
+            <div id="coursesView" class="admin-panel" style="margin-top:12px">
+              <div class="admin-list" style="flex:1">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <h3 style="margin:0">Mata Kuliah</h3>
+                  <div>
+                    <button id="addCourseBtn" class="btn">+ Tambah</button>
+                  </div>
+                </div>
+                <div id="coursesAdminList" style="margin-top:10px"></div>
+              </div>
+
+              <!-- Side panel: Materi & Soal quick preview (optional) -->
+              <div style="width:360px">
+                <div id="materiPanel" class="panel">
+                  <h3 id="materiCourseTitle">Materi</h3>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div class="muted">Daftar Materi</div>
+                    <div><button id="addMateriBtn" class="btn sm">+ Materi</button></div>
+                  </div>
+                  <div id="materiList"></div>
+                </div>
+
+                <div id="soalPanel" class="panel" style="margin-top:12px">
+                  <h3 id="soalMateriTitle">Soal</h3>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div class="muted">Daftar Soal</div>
+                    <div><button id="addSoalBtn" class="btn sm">+ Soal</button></div>
+                  </div>
+                  <div id="soalList"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- fallback result/other sections could go here -->
+          </div>
         </div>
 
       </section>
     </main>
 
-    <footer class="footer">
+    <footer class="footer" style="padding:10px 18px;text-align:center">
       <small>Admin Panel — Kelola Mata Kuliah, Materi & Soal</small>
     </footer>
   </div>
 
+  <!-- admin-firebase.js expects module import -->
   <script type="module" src="admin-firebase.js"></script>
+  <script>
+    // small UX: toggle panel visibility when openMateri/openSoal called
+    // admin-firebase.js will directly set display:block on #materiPanel/#soalPanel,
+    // but to be safe hide them initially
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('materiPanel').style.display = 'none';
+      document.getElementById('soalPanel').style.display = 'none';
+
+      // simple nav to switch to courses view when clicking menu
+      document.querySelectorAll('.menu button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.menu button').forEach(x=>x.classList.remove('active'));
+          btn.classList.add('active');
+          const v = btn.dataset.view;
+          document.getElementById('mainTitle').textContent = btn.textContent.trim();
+          // show courses view for 'courses'
+          if (v === 'courses') {
+            document.getElementById('coursesView').style.display = 'flex';
+          } else {
+            document.getElementById('coursesView').style.display = 'none';
+            // hide panels when not in courses
+            document.getElementById('materiPanel').style.display = 'none';
+            document.getElementById('soalPanel').style.display = 'none';
+          }
+        });
+      });
+
+      // wire addCourseBtn used by script but we also trigger simple prompt fallback
+      const addCourseBtn = document.getElementById('addCourseBtn');
+      if (addCourseBtn) addCourseBtn.addEventListener('click', () => {
+        // forward click will be handled inside admin-firebase.js (it assigns handler to same id)
+        // if not, provide fallback prompt and reload list via Firestore add (requires same logic)
+      });
+    });
+  </script>
 </body>
 </html>
