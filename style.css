@@ -1,324 +1,167 @@
-/* =====================================================
-   THEME VARIABLE SYSTEM
-   ===================================================== */
+  /* (sama seperti style yang kita gunakan sebelumnya, saya sertakan versi ringkas sudah kompatibel) */
+  :root{
+    --bg:#111;
+    --bg-alt:#121212;
+    --card:#181818;
+    --muted:#9aa4a6;
+    --text:#eaf6ef;
+    --accent:#00A884;
+    --danger:#ff6b6b;
+    --radius:12px;
+    --soft-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    --glass: rgba(255,255,255,0.02);
+    --gap:14px;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
 
-/* Default = LIGHT MODE */
-:root {
-  --bg:#f6f6f6;
-  --bg-alt:#ffffff;
-  --card:#ffffff;
-  --text:#1a1a1a;
-  --muted:#555;
-  --accent:#00A884;
-  --danger:#ff4f4f;
-  --glass: rgba(0,0,0,0.05);
-  --soft-shadow: 0 6px 18px rgba(0,0,0,0.18);
-  --radius:12px;
-  --gap:14px;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  *{box-sizing:border-box}
+  html,body,#root{height:100%}
+  body{
+    margin:0;
+    background:linear-gradient(180deg,var(--bg) 0%, var(--bg-alt) 100%);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    line-height:1.45;
+  }
+
+  .app{min-height:100vh;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;background:transparent;
+    border-bottom:1px solid rgba(255,255,255,0.03);
+  }
+  .topbar h1{margin:0;font-size:18px;letter-spacing:0.2px}
+  .top-actions{display:flex;gap:10px;align-items:center}
+
+  .container{
+    display:flex;gap:var(--gap);padding:20px;flex:1;
+    width:min(1100px,100%);margin:18px auto;
+    align-items:flex-start;
+  }
+
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:var(--radius);padding:18px;box-shadow:var(--soft-shadow);
+    border:1px solid rgba(255,255,255,0.03);
+  }
+
+  .list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .form-row{display:flex;gap:10px;margin-top:12px}
+  .form-row input{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);
+    background:transparent;color:var(--text)}
+
+  .btn{
+    padding:8px 12px;border-radius:999px;background:transparent;border:1px solid rgba(255,255,255,0.06);
+    color:var(--text);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn.primary{background:var(--accent);color:#fff;border:0}
+  .btn.circle{width:40px;height:40px;display:inline-grid;place-items:center;border-radius:50%}
+  .btn:hover{transform:translateY(-1px)}
+  .small{font-size:12px;color:var(--muted)}
+
+  .help ol{padding-left:18px;color:var(--muted)}
+
+  .footer{padding:12px;text-align:center;color:var(--muted);font-size:13px}
+
+  /* Course item */
+  .course-item{
+    display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:10px;background:var(--glass);
+    border:1px solid rgba(255,255,255,0.02)
+  }
+  .course-item .left{display:flex;gap:12px;align-items:center}
+  .course-badge{width:44px;height:44px;border-radius:10px;background:rgba(0,0,0,0.3);display:grid;place-items:center;font-weight:600;color:var(--accent)}
+
+  /* Quiz styles */
+  .question-card{margin:12px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
+  .q-text{margin-bottom:10px;color:var(--text)}
+  .choices{display:grid;gap:10px}
+  .choice{
+    padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;
+    background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    transition:all .18s ease;user-select:none;
+  }
+  .choice.selected{background:linear-gradient(180deg, rgba(0,168,132,0.14), rgba(0,168,132,0.06));border-color:rgba(0,168,132,0.25)}
+  .choice.wrong{background:linear-gradient(180deg, rgba(255,107,107,0.12), rgba(255,107,107,0.05));border-color:rgba(255,107,107,0.25)}
+  .choice .label{font-weight:600;color:var(--accent);margin-right:8px}
+  .choice .text{color:var(--text);display:inline-block}
+
+  /* result styles */
+  .result-row{margin:10px 0;padding:12px;border-radius:10px;background:rgba(255,255,255,0.01);border-left:4px solid transparent}
+  .result-row.correct{border-left-color:var(--accent)}
+  .result-row.incorrect{border-left-color:var(--danger)}
+
+  /* admin layout */
+  .admin-container{display:flex;gap:var(--gap);width:100%}
+  .left-panel{width:340px;min-height:60vh;max-height:70vh;overflow:auto;padding:12px}
+  .right-panel{flex:1;min-height:60vh;max-height:70vh;overflow:auto;padding:12px}
+  .scrollable{overflow-y:auto;}
+
+  /* compact forms */
+  .stack > *{margin-bottom:10px}
+  textarea{min-height:80px;padding:10px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--text)}
+  input,select{padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text)}
+
+  /* responsive */
+  @media (max-width:900px){
+    .container{flex-direction:column;padding:14px}
+    .admin-container{flex-direction:column}
+    .left-panel{width:100%;max-height:unset}
+    .right-panel{width:100%}
+  }
+
+  /* small touches */
+  .muted{color:var(--muted);font-size:13px}
+  .actions-row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+
+  /* delete button specific */
+  .btn.danger{background:transparent;border:1px solid rgba(255,107,107,0.18);color:var(--danger)}
+  .btn.danger:hover{transform:none;filter:brightness(1.04)}
+    
+/* Quiz selection visuals */
+.choice.chosen {
+  outline: 2px solid rgba(0,168,132,0.18);
+  transform: translateY(-1px);
 }
 
-/* DARK MODE */
-body.dark {
-  --bg:#111;
-  --bg-alt:#121212;
-  --card:#181818;
-  --text:#eaf6ef;
-  --muted:#9aa4a6;
-  --glass: rgba(255,255,255,0.06);
-  --soft-shadow: 0 6px 18px rgba(0,0,0,0.6);
+#quizBox .choices.disabled-choices .choice {
+  pointer-events: none;
+  opacity: 0.95;
 }
 
-/* =====================================================
-   BASE STYLING
-   ===================================================== */
-
-* { box-sizing:border-box }
-html, body { height:100% }
-
-body {
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-  -webkit-font-smoothing:antialiased;
-  line-height:1.45;
-  transition: background .25s ease, color .25s ease;
+/* Final results */
+.choice.final-correct {
+  background: linear-gradient(180deg, rgba(0,168,132,0.14), rgba(0,168,132,0.06));
+  border-color: rgba(0,168,132,0.25);
+}
+.choice.final-wrong {
+  background: linear-gradient(180deg, rgba(255,107,107,0.12), rgba(255,107,107,0.05));
+  border-color: rgba(255,107,107,0.25);
 }
 
-.app { min-height:100vh; display:flex; flex-direction:column }
+/* Ensure labels/text contrast in light/dark handled by existing vars */
+/* Small spacing for result card */
+#quizBox .card { margin-top: 12px; }
 
-/* =====================================================
-   TOPBAR
-   ===================================================== */
-
-.topbar {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:16px 20px;
-  border-bottom:1px solid var(--glass);
+/* pilihan sementara dipilih sebelum Selesai */
+.choice.chosen {
+  outline: 2px solid rgba(0,168,132,0.20);
+  transform: translateY(-1px);
 }
 
-/* =====================================================
-   MAIN CONTAINER & CARD
-   ===================================================== */
+/* saat Selesai: nonaktifkan klik pada group */
+.choices.disabled-choices { pointer-events:none; opacity:0.98; }
 
-.container {
-  display:flex;
-  gap:var(--gap);
-  padding:20px;
-  flex:1;
-  width:min(1100px,100%);
-  margin:18px auto;
+/* hasil final */
+.choice.final-correct {
+  background: linear-gradient(180deg, rgba(0,168,132,0.14), rgba(0,168,132,0.06));
+  border-color: rgba(0,168,132,0.25);
+}
+.choice.final-wrong {
+  background: linear-gradient(180deg, rgba(255,107,107,0.12), rgba(255,107,107,0.05));
+  border-color: rgba(255,107,107,0.25);
 }
 
-.card {
-  background:var(--card);
-  border-radius:var(--radius);
-  padding:18px;
-  box-shadow:var(--soft-shadow);
-  border:1px solid var(--glass);
-}
-
-/* =====================================================
-   BUTTONS
-   ===================================================== */
-
-.btn {
-  padding:8px 12px;
-  border-radius:999px;
-  cursor:pointer;
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  border:1px solid var(--glass);
-  background:var(--card);
-  color:var(--text);
-  transition:all .15s ease;
-}
-
-.btn:hover { transform:translateY(-1px); opacity:.9; }
-.btn.primary { background:var(--accent); color:#fff; border:0 }
-.btn.circle { width:40px; height:40px; justify-content:center }
-.btn.danger { background:var(--danger); color:#fff; border:0 }
-.btn.ghost { background:transparent; border:1px solid var(--glass) }
-
-/* =====================================================
-   COURSE LIST
-   ===================================================== */
-
-.course-item {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:12px;
-  border-radius:10px;
-  background:var(--glass);
-  border:1px solid var(--glass);
-  transition:.2s;
-}
-.course-item:hover { background:rgba(255,255,255,0.08) }
-
-.course-badge {
-  width:44px; height:44px; border-radius:10px;
-  background:rgba(0,0,0,0.25);
-  display:grid; place-items:center;
-  font-weight:600; color:var(--accent);
-}
-
-/* =====================================================
-   QUIZ – PERTANYAAN & PILIHAN
-   ===================================================== */
-
-.question-card {
-  margin:12px 0;
-  padding:12px;
-  background:var(--glass);
-  border-radius:12px;
-  border:1px solid var(--glass);
-  transition:0.2s;
-}
-.question-card:hover {
-  transform:translateY(-3px);
-  box-shadow:var(--soft-shadow);
-}
-
-/* --- PILIHAN SOAL --- */
-.choice,
-.option-btn {
-  padding:12px;
-  border-radius:10px;
-  background:var(--card);
-  border:2px solid var(--glass);
-  cursor:pointer;
-  transition:0.2s;
-  margin:8px 0;
-  color:var(--text);
-}
-
-.choice:hover,
-.option-btn:hover {
-  background:rgba(0,0,0,0.04);
-}
-
-body.dark .choice:hover,
-body.dark .option-btn:hover {
-  background:rgba(255,255,255,0.06);
-}
-
-/* Disabled */
-.choice.disabled,
-.option-btn.disabled {
-  opacity:0.5;
-  pointer-events:none;
-}
-
-/* Status Benar/Salah */
-.choice.correct,
-.option-btn.correct {
-  border-color:var(--accent);
-  background:rgba(0,168,132,0.15);
-  color:var(--accent);
-  font-weight:600;
-}
-
-.choice.wrong,
-.option-btn.wrong {
-  border-color:var(--danger);
-  background:rgba(255,79,79,0.15);
-  color:var(--danger);
-  font-weight:600;
-}
-
-/* Selected khusus untuk tombol model lama */
-.option-btn.selected {
-  background:var(--accent);
-  color:#fff;
-  border-color:var(--accent);
-}
-
-/* Pembahasan */
-.explanation {
-  margin-top:8px;
-  padding:10px;
-  background:var(--card);
-  border-radius:8px;
-  border:1px solid var(--glass);
-}
-
-/* =====================================================
-   RESULT – TAMPILAN HASIL
-   ===================================================== */
-
-.result-item {
-  padding:14px;
-  margin:12px 0;
-  border-radius:12px;
-  background:var(--glass);
-  border-left:6px solid transparent;
-}
-
-.result-item.correct {
-  border-left-color:var(--accent);
-  background:rgba(0,168,132,0.15);
-}
-
-.result-item.wrong {
-  border-left-color:var(--danger);
-  background:rgba(255,79,79,0.15);
-}
-
-.result-question {
-  font-weight:600;
-  margin-bottom:6px;
-}
-
-.result-answer {
-  margin-top:6px;
-  padding:8px;
-  background:var(--card);
-  border-radius:8px;
-  border:1px solid var(--glass);
-}
-
-/* =====================================================
-   ADMIN PANEL
-   ===================================================== */
-
-.wa-root, .wa-sidebar, .wa-main, .wa-card {
-  background:var(--card);
-  color:var(--text);
-  border-color:var(--glass);
-}
-
-.badge {
-  background:var(--glass);
-  color:var(--accent);
-}
-
-.menu button {
-  width:100%; padding:10px;
-  background:transparent;
-  border-radius:8px;
-  border:0;
-  color:var(--text);
-}
-
-.menu button:hover { background:var(--glass) }
-
-.menu button.active {
-  background:rgba(255,255,255,0.12);
-}
-
-.materi-row, .q-row {
-  background:var(--glass);
-  padding:12px;
-  border-radius:10px;
-  border:1px solid var(--glass);
-}
-
-/* =====================================================
-   INPUTS
-   ===================================================== */
-
-input, textarea, select {
-  width:100%; padding:10px;
-  border-radius:10px;
-  background:var(--glass);
-  border:1px solid var(--glass);
-  color:var(--text);
-}
-
-/* =====================================================
-   MODAL
-   ===================================================== */
-
-#wa_modal_root > div {
-  backdrop-filter: blur(4px) brightness(0.5);
-}
-
-/* =====================================================
-   TOAST
-   ===================================================== */
-
-.wa-toast {
-  background:var(--accent);
-  color:white;
-  padding:10px 14px;
-  border-radius:10px;
-}
-
-/* =====================================================
-   UTILITIES
-   ===================================================== */
-
-.hidden { display:none }
-
-/* =====================================================
-   RESPONSIVE
-   ===================================================== */
-
-@media(max-width:900px){
-  .container { flex-direction:column }
-  .admin-container { flex-direction:column }
-}
+/* spacing result card */
+#quizBox > .card { margin-top: 12px; }
+  
