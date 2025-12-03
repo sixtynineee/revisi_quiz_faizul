@@ -3,302 +3,57 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Quiz App — Belajar Interaktif</title>
+    <title>QuizApp - Belajar Interaktif</title>
     <link rel="stylesheet" href="style.css" />
-    <style>
-        /* Loading styles for better UX */
-        #loadingOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: var(--bg-primary);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            transition: opacity 0.3s ease;
-        }
-        
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid var(--border-color);
-            border-top-color: var(--primary-color);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .fade-out {
-            opacity: 0;
-            pointer-events: none;
-        }
-        
-        /* Responsive improvements */
-        @media (max-width: 768px) {
-            .container {
-                padding: 12px;
-            }
-            
-            .topbar h1 {
-                font-size: 1.25rem;
-            }
-        }
-    </style>
 </head>
 <body>
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay">
-        <div class="spinner"></div>
-    </div>
-
-    <!-- Main App Structure -->
     <div class="app">
-        <!-- Header -->
         <header class="topbar">
-            <div class="brand">
-                <h1>QuizApp</h1>
-                <small class="muted">Belajar Interaktif</small>
-            </div>
+            <h1>📚 QuizApp</h1>
             <div class="top-actions">
-                <button id="themeToggle" class="btn btn-icon" aria-label="Toggle dark mode">
-                    <span class="theme-icon">🌙</span>
-                </button>
-                <a href="admin.html" class="btn btn-secondary" aria-label="Go to admin panel">
-                    <span style="margin-right: 4px;">⚙️</span> Admin
-                </a>
+                <button id="themeToggle" class="btn circle">☾</button>
+                <a class="btn" href="admin.html">Admin</a>
             </div>
         </header>
 
-        <!-- Main Content -->
         <main class="container">
-            <!-- Mata Kuliah Section -->
-            <section id="mataKuliahSection" style="display: block;">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Pilih Mata Kuliah</h2>
-                        <p class="muted">Pilih mata kuliah untuk melihat daftar course yang tersedia</p>
+            <section class="card">
+                <h2>Selamat Datang di QuizApp</h2>
+                <p>Platform belajar interaktif dengan sistem quiz untuk meningkatkan pemahaman Anda.</p>
+                
+                <div class="features">
+                    <div class="feature-item">
+                        <h3>🎓 Mata Kuliah Lengkap</h3>
+                        <p>Akses berbagai mata kuliah dengan materi yang terstruktur</p>
                     </div>
-                    <div id="mataKuliahList" class="mata-kuliah-grid"></div>
-                </div>
-            </section>
-
-            <!-- Courses Section -->
-            <section id="coursesSection" style="display: none;">
-                <div class="back-nav">
-                    <button id="backToMataKuliah" class="btn-back">
-                        <span>←</span> Kembali ke Mata Kuliah
-                    </button>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h2 id="coursesTitle">Daftar Course</h2>
-                        <p class="muted" id="coursesSubtitle">Pilih course untuk mulai quiz</p>
+                    <div class="feature-item">
+                        <h3>📝 Quiz Interaktif</h3>
+                        <p>Uji pengetahuan dengan quiz yang menarik</p>
                     </div>
-                    <div id="coursesList" class="courses-grid"></div>
+                    <div class="feature-item">
+                        <h3>📊 Hasil Real-time</h3>
+                        <p>Dapatkan hasil dan analisis langsung</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="quiz.html" class="btn primary" style="padding: 12px 24px; font-size: 16px;">
+                        Mulai Belajar Sekarang →
+                    </a>
                 </div>
             </section>
-
-            <!-- Quiz Section -->
-            <section id="quizSection" style="display: none;">
-                <div id="quizHeader" class="quiz-header"></div>
-                <div id="quizContainer" class="quiz-container"></div>
+            
+            <section class="card">
+                <h3>📋 Daftar Mata Kuliah</h3>
+                <div id="mataKuliahList" class="list"></div>
             </section>
-
-            <!-- Results Section (will be shown by JS) -->
-            <section id="resultSection" style="display: none;"></section>
         </main>
 
-        <!-- Footer -->
         <footer class="footer">
-            <div class="footer-content">
-                <small class="muted">© 2024 QuizApp • Belajar dengan cara yang menyenangkan</small>
-                <div class="footer-links">
-                    <a href="admin.html" class="muted">Admin Panel</a>
-                    <span class="muted">•</span>
-                    <button id="helpBtn" class="btn-link muted">Bantuan</button>
-                </div>
-            </div>
+            <small>© 2024 QuizApp • Belajar dengan cara yang menyenangkan</small>
         </footer>
     </div>
 
-    <!-- Help Modal (hidden by default) -->
-    <div id="helpModal" class="modal-overlay" style="display: none;">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>📚 Panduan QuizApp</h3>
-                <button class="btn-icon close-modal" aria-label="Close help">✕</button>
-            </div>
-            <div class="modal-body">
-                <h4>Cara Menggunakan:</h4>
-                <ol style="margin-left: 20px; margin-bottom: 16px;">
-                    <li><strong>Pilih Mata Kuliah</strong> - Pilih mata kuliah yang ingin dipelajari</li>
-                    <li><strong>Pilih Course</strong> - Pilih course spesifik dalam mata kuliah</li>
-                    <li><strong>Mulai Quiz</strong> - Jawab pertanyaan satu per satu</li>
-                    <li><strong>Lihat Hasil</strong> - Lihat skor dan review jawaban</li>
-                </ol>
-                
-                <h4>Tips Belajar:</h4>
-                <ul style="margin-left: 20px; margin-bottom: 16px;">
-                    <li>Baca soal dengan teliti sebelum menjawab</li>
-                    <li>Manfaatkan fitur review untuk belajar dari kesalahan</li>
-                    <li>Gunakan mode gelap untuk mengurangi ketegangan mata</li>
-                    <li>Ulangi quiz untuk meningkatkan pemahaman</li>
-                </ul>
-                
-                <div class="alert info">
-                    <strong>💡 Tips:</strong> Quiz ini menggunakan sistem penyimpanan Firebase, jadi skor Anda akan tersimpan secara online.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-primary close-modal">Mengerti</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- JavaScript -->
     <script type="module" src="app.js"></script>
-    
-    <script>
-        // Initial loading animation
-        window.addEventListener('load', function() {
-            setTimeout(() => {
-                const overlay = document.getElementById('loadingOverlay');
-                if (overlay) {
-                    overlay.classList.add('fade-out');
-                    setTimeout(() => overlay.remove(), 300);
-                }
-            }, 500);
-        });
-
-        // Help modal functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const helpBtn = document.getElementById('helpBtn');
-            const helpModal = document.getElementById('helpModal');
-            const closeButtons = document.querySelectorAll('.close-modal');
-
-            if (helpBtn && helpModal) {
-                helpBtn.addEventListener('click', () => {
-                    helpModal.style.display = 'flex';
-                });
-            }
-
-            closeButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    helpModal.style.display = 'none';
-                });
-            });
-
-            // Close modal when clicking outside
-            helpModal?.addEventListener('click', (e) => {
-                if (e.target === helpModal) {
-                    helpModal.style.display = 'none';
-                }
-            });
-
-            // Handle escape key
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && helpModal.style.display === 'flex') {
-                    helpModal.style.display = 'none';
-                }
-            });
-        });
-
-        // Add inline styles for modal
-        const modalStyles = document.createElement('style');
-        modalStyles.textContent = `
-            .modal-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1000;
-                padding: 20px;
-            }
-            
-            .modal {
-                background: var(--bg-card);
-                border-radius: var(--radius-lg);
-                width: 100%;
-                max-width: 500px;
-                max-height: 80vh;
-                overflow-y: auto;
-                border: 1px solid var(--border-color);
-                box-shadow: var(--shadow-lg);
-            }
-            
-            .modal-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: var(--space-lg);
-                border-bottom: 1px solid var(--border-color);
-            }
-            
-            .modal-body {
-                padding: var(--space-lg);
-            }
-            
-            .modal-footer {
-                padding: var(--space-lg);
-                border-top: 1px solid var(--border-color);
-                display: flex;
-                justify-content: flex-end;
-            }
-            
-            .btn-link {
-                background: none;
-                border: none;
-                color: inherit;
-                cursor: pointer;
-                text-decoration: underline;
-                font-size: inherit;
-            }
-            
-            .alert {
-                padding: var(--space-md);
-                border-radius: var(--radius-md);
-                margin-top: var(--space-md);
-            }
-            
-            .alert.info {
-                background: rgba(59, 130, 246, 0.1);
-                border: 1px solid rgba(59, 130, 246, 0.2);
-                color: var(--primary-color);
-            }
-            
-            .footer-content {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: var(--space-md);
-            }
-            
-            .footer-links {
-                display: flex;
-                gap: var(--space-sm);
-                align-items: center;
-            }
-            
-            @media (max-width: 640px) {
-                .footer-content {
-                    flex-direction: column;
-                    text-align: center;
-                }
-            }
-        `;
-        document.head.appendChild(modalStyles);
-    </script>
 </body>
 </html>
