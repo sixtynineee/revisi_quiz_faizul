@@ -8,8 +8,6 @@
 </head>
 <body>
     <div class="app">
-        
-        <!-- TOPBAR -->
         <header class="topbar">
             <h1>Quiz App</h1>
             <div class="top-actions">
@@ -20,37 +18,29 @@
 
         <main class="container">
 
-            <!-- ============= MATA KULIAH ============= -->
+            <!-- LIST COURSE -->
             <section class="card" id="coursesSection">
-                <h2>Mata Kuliah</h2>
+                <h2>Daftar Soal</h2>
                 <div id="coursesList" class="list"></div>
             </section>
 
-            <!-- ============= MATERI LIST ============= -->
-            <section class="card" id="materiSection" style="display:none;">
-                <h2>Materi</h2>
-                <div id="materiList" class="list"></div>
-            </section>
-
-            <!-- ============= QUIZ VIEW ============= -->
+            <!-- QUIZ VIEW -->
             <section class="card" id="quizSection" style="display:none;">
                 <h2 id="quizTitle"></h2>
-
-                <!-- header: progress + selesai -->
-                <div id="quizHeader" style="margin-bottom:12px;"></div>
-                <div id="quizProgress" class="muted" style="margin-bottom:12px;"></div>
-
                 <div id="quizContainer"></div>
-            </section>
-
-            <!-- ============= RESULT VIEW ============= -->
-            <section class="card" id="resultSection" style="display:none;">
-                <h2>Hasil</h2>
-                <div id="resultSection"></div>
 
                 <div class="actions-row" style="margin-top:18px;">
-                    <button class="btn" id="backToMateri">Kembali ke Materi</button>
-                    <button class="btn primary" id="retryBtn">Ulangi</button>
+                    <button class="btn primary" id="finishQuizBtn">Selesai</button>
+                    <button class="btn" id="backToCourses">Kembali</button>
+                </div>
+            </section>
+
+            <!-- RESULT VIEW -->
+            <section class="card" id="resultSection" style="display:none;">
+                <h2>Hasil</h2>
+                <div id="resultBox"></div>
+                <div class="actions-row">
+                    <button class="btn" id="backHome">Kembali ke daftar</button>
                 </div>
             </section>
 
@@ -59,24 +49,8 @@
         <footer class="footer">
             <small>Quiz App — User mode</small>
         </footer>
-
     </div>
 
-    <!-- SCRIPT -->
-    <script type="module" src="app.js"></script>
-
-    <!-- ADMIN LOGIN MODAL -->
-<div id="adminLoginModal" class="modal hidden">
-  <div class="modal-content">
-    <h2>Admin Login</h2>
-    <input id="adminEmail" type="email" placeholder="Email admin">
-    <input id="adminPassword" type="password" placeholder="Password">
-    <button id="loginAdminBtn">Login</button>
-    <button id="closeAdminLogin">Tutup</button>
-    <p id="adminLoginError" style="color:red; display:none;">Login gagal.</p>
-  </div>
-</div>
-
+    <script type="module" src="user.js"></script>
 </body>
 </html>
-
