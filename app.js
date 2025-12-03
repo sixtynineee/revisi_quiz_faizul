@@ -1,10 +1,5 @@
-// admin.js
-// Full single-file Admin panel (WhatsApp-web style) with Firebase Auth + Firestore + local fallback
-// Updated: Added dark mode, toast notifications, ensured "Tambah Course" visibility
+// app.js - Admin Panel Sederhana dengan Struktur Hierarkis (Mata Kuliah -> Course -> Soal)
 
-// -------------------------------
-// CONFIG: Ganti dengan config Firebase-mu jika perlu
-// -------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -14,9 +9,6 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// -------------------------------
-// Imports (via Firebase CDN modular)
-// -------------------------------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import {
   getAuth,
@@ -33,822 +25,514 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  Timestamp,
   query,
-  where,
-  orderBy,
-  limit,
-  Timestamp
+  orderBy
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// -------------------------------
 // Initialize Firebase
-// -------------------------------
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// -------------------------------
-// Local fallback keys & defaults
-// -------------------------------
-const STORAGE_KEY = "quizData_v1";
-const DEFAULT_DATA = {
-  courses: [
-    {
-      id: "local-1",
-      name: "Sample Course (Local)",
-      description: "Contoh course yang disimpan lokal",
-      questions: [
-        {
-          id: "q-1",
-          question: "Apa kepanjangan CPU?",
-          options: { A: "Central Processing Unit", B: "Control Process Unit", C: "Central Procedural Unit", D: "Computer Power Unit" },
-          correct: "A",
-          explanation: "CPU adalah unit pemrosesan utama."
-        }
-      ]
-    }
-  ]
-};
+let currentMataKuliah = null;
+let currentCourse = null;
 
-// -------------------------------
-// Utilities
-// -------------------------------
-function uidPrefix() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-function makeId(prefix = '') { return prefix + uidPrefix(); }
-function escapeHTML(s) {
-  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
-}
-function qs(sel, root = document) { return root.querySelector(sel); }
-function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
+// Elements
+const appContainer = document.getElementById('app-root') || document.body;
 
-// -------------------------------
-// Local storage helpers
-// -------------------------------
-function readLocalData() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return JSON.parse(JSON.stringify(DEFAULT_DATA));
-  try { return JSON.parse(raw); } catch (e) { console.warn("Invalid local storage, reset"); localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DATA)); return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
-}
-function writeLocalData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
-
-// -------------------------------
-// Firestore wrappers with fallback
-// -------------------------------
-async function getAllCourses() {
-  try {
-    const snap = await getDocs(collection(db, "courses"));
-    const list = [];
-    snap.forEach(d => list.push({ id: d.id, ...(d.data()) }));
-    if (list.length === 0) {
-      // fallback to local
-      const local = readLocalData();
-      return local.courses || [];
-    }
-    return list.map(normalizeCourseFromFirestore);
-  } catch (err) {
-    console.warn("Firestore getAllCourses failed, fallback to local", err);
-    const local = readLocalData();
-    return local.courses || [];
-  }
-}
-
-function normalizeCourseFromFirestore(d) {
-  return {
-    id: d.id || d.id,
-    name: d.name || d.name,
-    description: d.description || d.description || '',
-    questions: Array.isArray(d.questions) ? d.questions.map(normalizeQuestionFromFirestore) : (d.questions || [])
-  };
-}
-function normalizeQuestionFromFirestore(q) {
-  return {
-    id: q.id || makeId('q-'),
-    question: q.question || q.text || q.pertanyaan || '',
-    options: q.options || q.choices || { A: q.opsi_a, B: q.opsi_b, C: q.opsi_c, D: q.opsi_d } || {},
-    correct: (q.correct || q.answer || q.jawaban || '').toUpperCase() || 'A',
-    explanation: q.explanation || q.explain || q.penjelasan || ''
-  };
-}
-
-async function saveCourseToFirestore(course) {
-  try {
-    const payload = {
-      name: course.name,
-      description: course.description || '',
-      questions: course.questions || [],
-      createdAt: Timestamp.now()
-    };
-    const ref = await addDoc(collection(db, "courses"), payload);
-    return { success: true, id: ref.id };
-  } catch (err) {
-    console.error("saveCourseToFirestore error", err);
-    const data = readLocalData();
-    data.courses.push(course);
-    writeLocalData(data);
-    return { success: false, id: course.id };
-  }
-}
-
-async function updateCourseInFirestore(id, updates) {
-  try {
-    await updateDoc(doc(db, "courses", id), updates);
-    return { success: true };
-  } catch (err) {
-    console.warn("updateCourseInFirestore failed", err);
-    const data = readLocalData();
-    const c = data.courses.find(x => x.id === id);
-    if (c) Object.assign(c, updates);
-    writeLocalData(data);
-    return { success: false };
-  }
-}
-
-async function deleteCourseFromFirestore(id) {
-  try {
-    await deleteDoc(doc(db, "courses", id));
-    return { success: true };
-  } catch (err) {
-    console.warn("deleteCourseFromFirestore failed", err);
-    const data = readLocalData();
-    data.courses = data.courses.filter(x => x.id !== id);
-    writeLocalData(data);
-    return { success: false };
-  }
-}
-
-async function addQuestionToCourse(courseId, question) {
-  try {
-    const ref = doc(db, "courses", courseId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) throw new Error("Course not found in Firestore");
-    const data = snap.data();
-    const qs = Array.isArray(data.questions) ? data.questions : [];
-    qs.push(question);
-    await updateDoc(ref, { questions: qs });
-    return { success: true };
-  } catch (err) {
-    console.warn("addQuestionToCourse Firestore failed", err);
-    const local = readLocalData();
-    const c = local.courses.find(x => x.id === courseId);
-    if (c) {
-      c.questions = c.questions || [];
-      c.questions.push(question);
-      writeLocalData(local);
-      return { success: false };
-    }
-    return { success: false };
-  }
-}
-
-async function updateQuestionInCourse(courseId, questionId, updated) {
-  try {
-    const ref = doc(db, "courses", courseId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) throw new Error("Course not found");
-    const data = snap.data();
-    const qs = Array.isArray(data.questions) ? data.questions : [];
-    const idx = qs.findIndex(q => (q.id || q.qid) === questionId);
-    if (idx === -1) throw new Error("Question not found");
-    qs[idx] = { ...qs[idx], ...updated };
-    await updateDoc(ref, { questions: qs });
-    return { success: true };
-  } catch (err) {
-    console.warn("updateQuestionInCourse failed", err);
-    const local = readLocalData();
-    const c = local.courses.find(x => x.id === courseId);
-    if (c) {
-      const qidx = (c.questions || []).findIndex(q => q.id === questionId);
-      if (qidx !== -1) {
-        c.questions[qidx] = { ...c.questions[qidx], ...updated };
-        writeLocalData(local);
-        return { success: false };
-      }
-    }
-    return { success: false };
-  }
-}
-
-async function deleteQuestionFromCourse(courseId, questionId) {
-  try {
-    const ref = doc(db, "courses", courseId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) throw new Error("Course not found");
-    const data = snap.data();
-    const qs = Array.isArray(data.questions) ? data.questions : [];
-    const newQs = qs.filter(q => (q.id || q.qid) !== questionId);
-    await updateDoc(ref, { questions: newQs });
-    return { success: true };
-  } catch (err) {
-    console.warn("deleteQuestionFromCourse failed", err);
-    const local = readLocalData();
-    const c = local.courses.find(x => x.id === courseId);
-    if (c) {
-      c.questions = (c.questions || []).filter(q => q.id !== questionId);
-      writeLocalData(local);
-      return { success: false };
-    }
-    return { success: false };
-  }
-}
-
-async function getAllParticipants() {
-  try {
-    const snap = await getDocs(collection(db, "peserta"));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.warn("getAllParticipants failed, fallback to empty", err);
-    return [];
-  }
-}
-
-async function addParticipant(payload) {
-  try {
-    const ref = await addDoc(collection(db, "peserta"), { ...payload, createdAt: Timestamp.now() });
-    return { success: true, id: ref.id };
-  } catch (err) {
-    console.warn("addParticipant failed", err);
-    return { success: false };
-  }
-}
-
-async function getAllScores() {
-  try {
-    const snap = await getDocs(collection(db, "scores"));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.warn("getAllScores failed", err);
-    return [];
-  }
-}
-
-async function addScore(payload) {
-  try {
-    const ref = await addDoc(collection(db, "scores"), { ...payload, createdAt: Timestamp.now() });
-    return { success: true, id: ref.id };
-  } catch (err) {
-    console.warn("addScore failed", err);
-    return { success: false };
-  }
-}
-
-async function isUserAdminByUid(uid) {
-  if (!uid) return false;
-  try {
-    const ref = doc(db, "admins", uid);
-    const snap = await getDoc(ref);
-    return snap.exists();
-  } catch (err) {
-    console.warn("isUserAdminByUid error", err);
-    return false;
-  }
-}
-
-// -------------------------------
-// Toast Notification System (Simple)
-// -------------------------------
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
-  toast.className = `wa-toast ${type}`;
-  toast.textContent = message;
-  toast.style.cssText = `
-    position: fixed; top: 20px; right: 20px; z-index: 10000;
-    background: ${type === 'success' ? '#25D366' : type === 'error' ? '#FF6B6B' : '#007bff'};
-    color: white; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    font-size: 14px; max-width: 300px; word-wrap: break-word;
-    animation: slideIn 0.3s ease-out;
-  `;
-  document.body.appendChild(toast);
-  setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease-in'; setTimeout(() => toast.remove(), 300); }, 3000);
-}
-
-// Add toast styles
-if (!document.getElementById('toast-styles')) {
-  const style = document.createElement('style');
-  style.id = 'toast-styles';
-  style.textContent = `
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
-  `;
-  document.head.appendChild(style);
-}
-
-// -------------------------------
-// Dark Mode Toggle
-// -------------------------------
-let isDarkMode = localStorage.getItem('darkMode') === 'true';
-function toggleDarkMode() {
-  isDarkMode = !isDarkMode;
-  localStorage.setItem('darkMode', isDarkMode);
-  applyDarkMode();
-}
-function applyDarkMode() {
-  const root = document.documentElement;
-  if (isDarkMode) {
-    root.style.setProperty('--wa-bg', '#111b21');
-    root.style.setProperty('--wa-dark', '#f0f2f5');
-    root.style.setProperty('--wa-card', '#1f2937');
-    root.style.setProperty('--wa-muted', '#9ca3af');
-    root.style.setProperty('--wa-accent', '#25D366');
-    root.style.setProperty('--wa-accent-2', '#075E54');
-  } else {
-    root.style.setProperty('--wa-bg', '#f0f2f5');
-    root.style.setProperty('--wa-dark', '#111b21');
-    root.style.setProperty('--wa-card', '#0b1416');
-    root.style.setProperty('--wa-muted', '#9aa4a6');
-    root.style.setProperty('--wa-accent', '#075E54');
-    root.style.setProperty('--wa-accent-2', '#25D366');
-  }
-}
-
-// -------------------------------
-// UI: build WhatsApp-like Admin UI into existing DOM (or replace)
-// -------------------------------
-function ensureRootStructure() {
-  const existing = document.querySelector('.admin-app-root');
-  if (existing) return existing;
-
-  document.body.innerHTML = '';
-  document.body.classList.add('admin-app-root', 'whatsapp-admin');
-
-  const app = document.createElement('div');
-  app.className = 'app admin-app-root';
-  app.innerHTML = `
-    <aside class="wa-sidebar" aria-hidden="false"></aside>
-    <main class="wa-main"></main>
-  `;
-  document.body.appendChild(app);
-
-  injectAdminStyles();
-  applyDarkMode(); // Apply initial dark mode
-  return app;
-}
-
-function injectAdminStyles() {
-  if (document.getElementById('wa-admin-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'wa-admin-styles';
-  style.textContent = `
-    :root{ --wa-bg:#f0f2f5; --wa-dark:#111b21; --wa-accent:#075E54; --wa-accent-2:#25D366; --wa-card:#0b1416; --wa-muted:#9aa4a6; --wa-radius:12px; }
-    body.whatsapp-admin { margin:0; font-family:Inter,system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica
-    body.whatsapp-admin {
-  margin:0;
-  overflow:hidden;
-  background:var(--wa-bg);
-  color:var(--wa-dark);
-  height:100vh;
-  display:flex;
-  font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-}
-
-/* SIDEBAR */
-.wa-sidebar {
-  width: 330px;
-  background: var(--wa-card);
-  border-right: 1px solid rgba(255,255,255,0.08);
-  display:flex;
-  flex-direction:column;
-  height:100%;
-  overflow:auto;
-}
-
-.wa-sidebar-header {
-  padding:16px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  background:var(--wa-card);
-  border-bottom:1px solid rgba(255,255,255,0.1);
-}
-.wa-sidebar-header h2 { margin:0; font-size:18px; }
-
-/* SIDEBAR LIST */
-.wa-list {
-  padding:8px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-
-.wa-item {
-  padding:14px;
-  background:rgba(255,255,255,0.03);
-  border-radius:var(--wa-radius);
-  cursor:pointer;
-  transition:0.2s;
-}
-.wa-item:hover { background:rgba(255,255,255,0.08); }
-.wa-item.active { background:rgba(37,211,102,0.18); }
-
-/* MAIN PANEL */
-.wa-main {
-  flex:1;
-  background:var(--wa-bg);
-  height:100%;
-  overflow-y:auto;
-  padding:20px;
-}
-
-.wa-card {
-  background:var(--wa-card);
-  padding:20px;
-  border-radius:var(--wa-radius);
-  box-shadow:0 4px 14px rgba(0,0,0,0.25);
-  border:1px solid rgba(255,255,255,0.05);
-  margin-bottom:20px;
-}
-
-/* FORMS */
-.wa-input, .wa-textarea, .wa-select {
-  width:100%;
-  padding:12px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.08);
-  background:transparent;
-  color:var(--wa-dark);
-  margin-bottom:12px;
-}
-.wa-textarea { min-height:100px; }
-
-.wa-btn {
-  padding:10px 18px;
-  background:var(--wa-accent);
-  color:#fff;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-  transition:0.2s;
-}
-.wa-btn:hover { opacity:0.9; }
-
-.wa-btn-danger {
-  background:#ff4c4c;
-}
-
-/* QUESTIONS INSIDE MAIN */
-.q-box {
-  padding:14px;
-  border-radius:10px;
-  background:rgba(255,255,255,0.03);
-  border:1px solid rgba(255,255,255,0.06);
-  margin-bottom:12px;
-}
-
-.q-option { color:var(--wa-muted); }
-
-/* Toggle switch */
-.dark-toggle {
-  cursor:pointer;
-  font-size:20px;
-  padding:4px;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar { width:8px; }
-::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:6px; }
-
-/* END STYLE */
-`;
-  document.head.appendChild(style);
-}
-
-applyDarkMode();
-
-/* ============================
-   RENDER UI
-============================ */
-function renderUI() {
-  const app = ensureRootStructure();
-
-  const sidebar = qs('.wa-sidebar');
-  const main = qs('.wa-main');
-
-  sidebar.innerHTML = `
-    <div class="wa-sidebar-header">
-      <h2>Admin</h2>
-      <div class="dark-toggle" id="toggleDark">🌓</div>
-    </div>
-
-    <div class="wa-list" id="courseList"></div>
-
-    <div style="padding:12px;">
-      <button class="wa-btn" id="addCourseBtn">＋ Tambah Course</button>
-    </div>
-
-    <div style="padding:12px;">
-      <button class="wa-btn" id="logoutBtn">Logout</button>
+// Render Login Form
+function renderLogin() {
+  appContainer.innerHTML = `
+    <div class="login-container">
+      <h2>Login Admin</h2>
+      <form id="loginForm">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button type="submit">Login</button>
+      </form>
     </div>
   `;
 
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>Selamat datang Admin</h2>
-      <p>Pilih course di kiri untuk mengelola soal.</p>
-    </div>
-  `;
-
-  qs('#toggleDark').onclick = toggleDarkMode;
-  qs('#logoutBtn').onclick = () => signOut(auth);
-  qs('#addCourseBtn').onclick = () => renderAddCourseForm();
-}
-
-/* ============================
-   LOAD COURSES
-============================ */
-async function loadCourses() {
-  const list = qs('#courseList');
-  list.innerHTML = `<div class="wa-item">Loading...</div>`;
-
-  const courses = await getAllCourses();
-
-  list.innerHTML = "";
-  courses.forEach(c => {
-    const div = document.createElement('div');
-    div.className = "wa-item";
-    div.textContent = c.name;
-    div.onclick = () => renderCourseDetail(c);
-    list.appendChild(div);
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      alert('Login gagal: ' + error.message);
+    }
   });
 }
 
-/* ============================
-   RENDER: COURSE DETAIL
-============================ */
-function renderCourseDetail(course) {
-  const main = qs('.wa-main');
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>${course.name}</h2>
-      <p>${course.description}</p>
-
-      <button class="wa-btn" id="editCourseBtn">Edit Course</button>
-      <button class="wa-btn wa-btn-danger" id="deleteCourseBtn">Hapus Course</button>
-    </div>
-
-    <div class="wa-card">
-      <h3>Daftar Pertanyaan</h3>
-      <div id="qList"></div>
-      <button class="wa-btn" id="addQBtn">＋ Tambah Pertanyaan</button>
-    </div>
-  `;
-
-  renderQuestions(course);
-
-  qs('#addQBtn').onclick = () => renderAddQuestionForm(course);
-  qs('#editCourseBtn').onclick = () => renderEditCourseForm(course);
-  qs('#deleteCourseBtn').onclick = async () => {
-    if (!confirm("Hapus course ini?")) return;
-    await deleteCourseFromFirestore(course.id);
-    showToast("Course dihapus", "success");
-    loadCourses();
-    qs('.wa-main').innerHTML = `<div class="wa-card"><h2>Pilih course</h2></div>`;
-  };
-}
-
-/* ============================
-   RENDER QUESTIONS
-============================ */
-function renderQuestions(course) {
-  const qList = qs('#qList');
-  qList.innerHTML = "";
-
-  if (!course.questions || course.questions.length === 0) {
-    qList.innerHTML = `<p class="wa-muted">Belum ada pertanyaan</p>`;
-    return;
-  }
-
-  course.questions.forEach(q => {
-    const div = document.createElement('div');
-    div.className = "q-box";
-    div.innerHTML = `
-      <b>${q.question}</b>
-      <div class="q-option">A: ${q.options.A}</div>
-      <div class="q-option">B: ${q.options.B}</div>
-      <div class="q-option">C: ${q.options.C}</div>
-      <div class="q-option">D: ${q.options.D}</div>
-      <p>Jawaban: <b>${q.correct}</b></p>
-
-      <button class="wa-btn" data-id="${q.id}" data-action="edit">Edit</button>
-      <button class="wa-btn wa-btn-danger" data-id="${q.id}" data-action="delete">Hapus</button>
-    `;
-    qList.appendChild(div);
-  });
-
-  qsa('.q-box button').forEach(btn => {
-    btn.onclick = async () => {
-      const qid = btn.dataset.id;
-      const action = btn.dataset.action;
-
-      if (action === "edit") renderEditQuestionForm(course, qid);
-      if (action === "delete") {
-        if (confirm("Hapus pertanyaan?")) {
-          await deleteQuestionFromCourse(course.id, qid);
-          showToast("Pertanyaan dihapus", "success");
-          const updated = await getAllCourses();
-          renderCourseDetail(updated.find(c => c.id === course.id));
-        }
-      }
-    };
-  });
-}
-
-/* ============================
-   RENDER ADD COURSE
-============================ */
-function renderAddCourseForm() {
-  const main = qs('.wa-main');
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>Tambah Course</h2>
-      <input class="wa-input" id="cName" placeholder="Nama course">
-      <textarea class="wa-textarea" id="cDesc" placeholder="Deskripsi"></textarea>
-      <button class="wa-btn" id="saveBtn">Simpan</button>
+// Render Admin Dashboard
+function renderAdminDashboard() {
+  appContainer.innerHTML = `
+    <div class="admin-dashboard">
+      <header>
+        <h1>Admin Panel</h1>
+        <button id="logoutBtn">Logout</button>
+      </header>
+      <div class="content">
+        <aside class="sidebar">
+          <h3>Mata Kuliah</h3>
+          <button id="addMataKuliahBtn">Tambah Mata Kuliah</button>
+          <div id="mataKuliahList"></div>
+        </aside>
+        <main class="main-content">
+          <div id="breadcrumb"></div>
+          <div id="mainView">
+            <h2>Selamat Datang, Admin</h2>
+            <p>Pilih mata kuliah untuk mengelola course dan soal.</p>
+          </div>
+        </main>
+      </div>
     </div>
   `;
 
-  qs('#saveBtn').onclick = async () => {
-    const name = qs('#cName').value.trim();
-    const desc = qs('#cDesc').value.trim();
-
-    if (!name) return showToast("Nama wajib diisi", "error");
-
-    const course = {
-      id: makeId('c-'),
-      name,
-      description: desc,
-      questions: []
-    };
-
-    await saveCourseToFirestore(course);
-    showToast("Course ditambahkan", "success");
-    renderUI();
-    loadCourses();
-  };
+  document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+  document.getElementById('addMataKuliahBtn').addEventListener('click', renderAddMataKuliahForm);
+  loadMataKuliah();
 }
 
-/* ============================
-   RENDER EDIT COURSE
-============================ */
-function renderEditCourseForm(course) {
-  const main = qs('.wa-main');
-
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>Edit Course</h2>
-      <input class="wa-input" id="cName" value="${course.name}">
-      <textarea class="wa-textarea" id="cDesc">${course.description}</textarea>
-      <button class="wa-btn" id="saveBtn">Update</button>
-    </div>
-  `;
-
-  qs('#saveBtn').onclick = async () => {
-    const name = qs('#cName').value.trim();
-    const desc = qs('#cDesc').value.trim();
-
-    await updateCourseInFirestore(course.id, {
-      name,
-      description: desc
+// Load Mata Kuliah
+async function loadMataKuliah() {
+  const listContainer = document.getElementById('mataKuliahList');
+  listContainer.innerHTML = 'Loading...';
+  try {
+    const q = query(collection(db, "mata_kuliah"), orderBy("nama"));
+    const snapshot = await getDocs(q);
+    listContainer.innerHTML = '';
+    snapshot.forEach(doc => {
+      const mataKuliah = doc.data();
+      const item = document.createElement('div');
+      item.className = 'mata-kuliah-item';
+      item.innerHTML = `
+        <h4>${mataKuliah.nama}</h4>
+        <p>${mataKuliah.description || 'Tidak ada deskripsi'}</p>
+        <p>Course: ${mataKuliah.totalCourses || 0}</p>
+        <button class="view-courses-btn" data-id="${doc.id}">Lihat Course</button>
+        <button class="edit-mk-btn" data-id="${doc.id}">Edit</button>
+        <button class="delete-mk-btn" data-id="${doc.id}">Hapus</button>
+      `;
+      listContainer.appendChild(item);
     });
 
-    showToast("Course diperbarui", "success");
-    renderUI();
-    loadCourses();
-  };
+    // Attach event listeners
+    document.querySelectorAll('.view-courses-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        viewCourses(id);
+      });
+    });
+
+    document.querySelectorAll('.edit-mk-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        editMataKuliah(id);
+      });
+    });
+
+    document.querySelectorAll('.delete-mk-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        deleteMataKuliah(id);
+      });
+    });
+  } catch (error) {
+    listContainer.innerHTML = 'Error loading mata kuliah.';
+    console.error(error);
+  }
 }
 
-/* ============================
-   RENDER ADD QUESTION
-============================ */
-function renderAddQuestionForm(course) {
-  const main = qs('.wa-main');
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>Tambah Pertanyaan</h2>
-      <textarea class="wa-textarea" id="qText" placeholder="Pertanyaan"></textarea>
+// View Courses of a Mata Kuliah
+async function viewCourses(mataKuliahId) {
+  const snapshot = await getDocs(collection(db, "mata_kuliah", mataKuliahId, "courses"));
+  const courses = [];
+  snapshot.forEach(doc => {
+    courses.push({ id: doc.id, ...doc.data() });
+  });
 
-      <input class="wa-input" id="optA" placeholder="Pilihan A">
-      <input class="wa-input" id="optB" placeholder="Pilihan B">
-      <input class="wa-input" id="optC" placeholder="Pilihan C">
-      <input class="wa-input" id="optD" placeholder="Pilihan D">
-
-      <select class="wa-select" id="qCorrect">
-        <option value="A">Jawaban A</option>
-        <option value="B">Jawaban B</option>
-        <option value="C">Jawaban C</option>
-        <option value="D">Jawaban D</option>
-      </select>
-
-      <textarea class="wa-textarea" id="qExplain" placeholder="Penjelasan (opsional)"></textarea>
-
-      <button class="wa-btn" id="saveBtn">Simpan Pertanyaan</button>
-    </div>
+  const mainView = document.getElementById('mainView');
+  mainView.innerHTML = `
+    <h2>Daftar Course</h2>
+    <button id="addCourseBtn">Tambah Course</button>
+    <div id="coursesList"></div>
   `;
 
-  qs('#saveBtn').onclick = async () => {
-    const q = {
-      id: makeId("q-"),
-      question: qs('#qText').value.trim(),
-      options: {
-        A: qs('#optA').value.trim(),
-        B: qs('#optB').value.trim(),
-        C: qs('#optC').value.trim(),
-        D: qs('#optD').value.trim(),
-      },
-      correct: qs('#qCorrect').value,
-      explanation: qs('#qExplain').value.trim()
-    };
-
-    await addQuestionToCourse(course.id, q);
-
-    showToast("Pertanyaan ditambahkan", "success");
-
-    const updated = await getAllCourses();
-    renderCourseDetail(updated.find(c => c.id === course.id));
-  };
-}
-
-/* ============================
-   RENDER EDIT QUESTION
-============================ */
-function renderEditQuestionForm(course, qid) {
-  const q = course.questions.find(x => x.id === qid);
-  const main = qs('.wa-main');
-
-  main.innerHTML = `
-    <div class="wa-card">
-      <h2>Edit Pertanyaan</h2>
-
-      <textarea class="wa-textarea" id="qText">${q.question}</textarea>
-
-      <input class="wa-input" id="optA" value="${q.options.A}">
-      <input class="wa-input" id="optB" value="${q.options.B}">
-      <input class="wa-input" id="optC" value="${q.options.C}">
-      <input class="wa-input" id="optD" value="${q.options.D}">
-
-      <select class="wa-select" id="qCorrect">
-        <option ${q.correct === "A" ? "selected" : ""}>A</option>
-        <option ${q.correct === "B" ? "selected" : ""}>B</option>
-        <option ${q.correct === "C" ? "selected" : ""}>C</option>
-        <option ${q.correct === "D" ? "selected" : ""}>D</option>
-      </select>
-
-      <textarea class="wa-textarea" id="qExplain">${q.explanation || ""}</textarea>
-
-      <button class="wa-btn" id="saveBtn">Update Pertanyaan</button>
-    </div>
-  `;
-
-  qs('#saveBtn').onclick = async () => {
-    const updated = {
-      question: qs('#qText').value.trim(),
-      options: {
-        A: qs('#optA').value.trim(),
-        B: qs('#optB').value.trim(),
-        C: qs('#optC').value.trim(),
-        D: qs('#optD').value.trim(),
-      },
-      correct: qs('#qCorrect').value,
-      explanation: qs('#qExplain').value.trim()
-    };
-
-    await updateQuestionInCourse(course.id, qid, updated);
-
-    showToast("Pertanyaan diperbarui", "success");
-
-    const updatedData = await getAllCourses();
-    renderCourseDetail(updatedData.find(c => c.id === course.id));
-  };
-}
-
-/* ============================
-   AUTH HANDLING
-============================ */
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    document.body.innerHTML = `
-      <div style="padding:40px;text-align:center;font-family:sans-serif;">
-        <h2>Login Admin</h2>
-        <input id="email" placeholder="Email" style="padding:10px;margin:10px;width:220px;">
-        <br>
-        <input id="pass" placeholder="Password" type="password" style="padding:10px;margin:10px;width:220px;">
-        <br>
-        <button id="loginBtn" style="padding:10px 20px;">Login</button>
-      </div>
-    `;
-
-    qs('#loginBtn').onclick = async () => {
-      const email = qs('#email').value;
-      const pass = qs('#pass').value;
-
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-      } catch (err) {
-        alert("Login gagal: " + err.message);
-      }
-    };
-
-    return;
+  const coursesList = document.getElementById('coursesList');
+  if (courses.length === 0) {
+    coursesList.innerHTML = '<p>Belum ada course.</p>';
+  } else {
+    coursesList.innerHTML = '';
+    courses.forEach(course => {
+      const item = document.createElement('div');
+      item.className = 'course-item';
+      item.innerHTML = `
+        <h4>${course.nama}</h4>
+        <p>${course.description || 'Tidak ada deskripsi'}</p>
+        <p>Soal: ${course.totalSoal || 0}</p>
+        <button class="view-soal-btn" data-mk="${mataKuliahId}" data-id="${course.id}">Lihat Soal</button>
+        <button class="edit-course-btn" data-mk="${mataKuliahId}" data-id="${course.id}">Edit</button>
+        <button class="delete-course-btn" data-mk="${mataKuliahId}" data-id="${course.id}">Hapus</button>
+      `;
+      coursesList.appendChild(item);
+    });
   }
 
-  renderUI();
-  loadCourses();
+  // Store current mata kuliah
+  const mkDoc = await getDoc(doc(db, "mata_kuliah", mataKuliahId));
+  currentMataKuliah = { id: mataKuliahId, ...mkDoc.data() };
+
+  // Update breadcrumb
+  updateBreadcrumb([
+    { text: 'Mata Kuliah', action: renderAdminDashboard },
+    { text: currentMataKuliah.nama, action: null }
+  ]);
+
+  document.getElementById('addCourseBtn').addEventListener('click', () => {
+    renderAddCourseForm(mataKuliahId);
+  });
+
+  // Attach event listeners for courses
+  document.querySelectorAll('.view-soal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mkId = btn.getAttribute('data-mk');
+      const courseId = btn.getAttribute('data-id');
+      viewSoal(mkId, courseId);
+    });
+  });
+
+  document.querySelectorAll('.edit-course-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mkId = btn.getAttribute('data-mk');
+      const courseId = btn.getAttribute('data-id');
+      editCourse(mkId, courseId);
+    });
+  });
+
+  document.querySelectorAll('.delete-course-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mkId = btn.getAttribute('data-mk');
+      const courseId = btn.getAttribute('data-id');
+      deleteCourse(mkId, courseId);
+    });
+  });
+}
+
+// View Soal of a Course
+async function viewSoal(mataKuliahId, courseId) {
+  const snapshot = await getDocs(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"));
+  const soal = [];
+  snapshot.forEach(doc => {
+    soal.push({ id: doc.id, ...doc.data() });
+  });
+
+  const mainView = document.getElementById('mainView');
+  mainView.innerHTML = `
+    <h2>Daftar Soal</h2>
+    <button id="addSoalBtn">Tambah Soal</button>
+    <div id="soalList"></div>
+  `;
+
+  const soalList = document.getElementById('soalList');
+  if (soal.length === 0) {
+    soalList.innerHTML = '<p>Belum ada soal.</p>';
+  } else {
+    soalList.innerHTML = '';
+    soal.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'soal-item';
+      item.innerHTML = `
+        <p><strong>Pertanyaan:</strong> ${s.pertanyaan}</p>
+        <p><strong>Pilihan:</strong></p>
+        <ul>
+          <li>A: ${s.pilihan.A}</li>
+          <li>B: ${s.pilihan.B}</li>
+          <li>C: ${s.pilihan.C}</li>
+          <li>D: ${s.pilihan.D}</li>
+        </ul>
+        <p><strong>Jawaban:</strong> ${s.jawaban}</p>
+        <p><strong>Penjelasan:</strong> ${s.explanation || 'Tidak ada'}</p>
+        <button class="edit-soal-btn" data-mk="${mataKuliahId}" data-cid="${courseId}" data-id="${s.id}">Edit</button>
+        <button class="delete-soal-btn" data-mk="${mataKuliahId}" data-cid="${courseId}" data-id="${s.id}">Hapus</button>
+      `;
+      soalList.appendChild(item);
+    });
+  }
+
+  // Get course and mata kuliah data for breadcrumb
+  const courseDoc = await getDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId));
+  currentCourse = { id: courseId, ...courseDoc.data() };
+
+  updateBreadcrumb([
+    { text: 'Mata Kuliah', action: renderAdminDashboard },
+    { text: currentMataKuliah.nama, action: () => viewCourses(mataKuliahId) },
+    { text: currentCourse.nama, action: null }
+  ]);
+
+  document.getElementById('addSoalBtn').addEventListener('click', () => {
+    renderAddSoalForm(mataKuliahId, courseId);
+  });
+
+  // Attach event listeners for soal
+  document.querySelectorAll('.edit-soal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mkId = btn.getAttribute('data-mk');
+      const cId = btn.getAttribute('data-cid');
+      const soalId = btn.getAttribute('data-id');
+      editSoal(mkId, cId, soalId);
+    });
+  });
+
+  document.querySelectorAll('.delete-soal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mkId = btn.getAttribute('data-mk');
+      const cId = btn.getAttribute('data-cid');
+      const soalId = btn.getAttribute('data-id');
+      deleteSoal(mkId, cId, soalId);
+    });
+  });
+}
+
+// Update Breadcrumb
+function updateBreadcrumb(items) {
+  const breadcrumb = document.getElementById('breadcrumb');
+  breadcrumb.innerHTML = '';
+  items.forEach((item, index) => {
+    const span = document.createElement('span');
+    if (item.action) {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = item.text;
+      a.addEventListener('click', item.action);
+      span.appendChild(a);
+    } else {
+      span.textContent = item.text;
+    }
+    breadcrumb.appendChild(span);
+    if (index < items.length - 1) {
+      breadcrumb.appendChild(document.createTextNode(' > '));
+    }
+  });
+}
+
+// Forms for adding/editing
+function renderAddMataKuliahForm() {
+  const mainView = document.getElementById('mainView');
+  mainView.innerHTML = `
+    <h2>Tambah Mata Kuliah</h2>
+    <form id="addMataKuliahForm">
+      <input type="text" id="nama" placeholder="Nama Mata Kuliah" required>
+      <textarea id="description" placeholder="Deskripsi"></textarea>
+      <button type="submit">Simpan</button>
+    </form>
+  `;
+
+  document.getElementById('addMataKuliahForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nama = document.getElementById('nama').value;
+    const description = document.getElementById('description').value;
+    try {
+      await addDoc(collection(db, "mata_kuliah"), {
+        nama,
+        description,
+        totalCourses: 0,
+        createdAt: Timestamp.now()
+      });
+      alert('Mata kuliah berhasil ditambahkan');
+      renderAdminDashboard();
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  });
+}
+
+function editMataKuliah(id) {
+  // Similar to renderAddMataKuliahForm, but with existing data and update
+  // For simplicity, we'll just show an alert
+  alert('Edit mata kuliah dengan ID: ' + id);
+  // You can implement a form to edit mata kuliah
+}
+
+async function deleteMataKuliah(id) {
+  if (confirm('Hapus mata kuliah ini? Semua course dan soal di dalamnya akan ikut terhapus.')) {
+    try {
+      // First, delete all courses and their soal
+      const coursesSnap = await getDocs(collection(db, "mata_kuliah", id, "courses"));
+      const deleteCoursesPromises = coursesSnap.docs.map(courseDoc => 
+        deleteDoc(doc(db, "mata_kuliah", id, "courses", courseDoc.id))
+      );
+      await Promise.all(deleteCoursesPromises);
+      // Then delete the mata kuliah
+      await deleteDoc(doc(db, "mata_kuliah", id));
+      alert('Mata kuliah berhasil dihapus');
+      renderAdminDashboard();
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  }
+}
+
+function renderAddCourseForm(mataKuliahId) {
+  const mainView = document.getElementById('mainView');
+  mainView.innerHTML = `
+    <h2>Tambah Course</h2>
+    <form id="addCourseForm">
+      <input type="text" id="nama" placeholder="Nama Course" required>
+      <textarea id="description" placeholder="Deskripsi"></textarea>
+      <button type="submit">Simpan</button>
+    </form>
+  `;
+
+  document.getElementById('addCourseForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nama = document.getElementById('nama').value;
+    const description = document.getElementById('description').value;
+    try {
+      await addDoc(collection(db, "mata_kuliah", mataKuliahId, "courses"), {
+        nama,
+        description,
+        totalSoal: 0,
+        createdAt: Timestamp.now()
+      });
+      // Update totalCourses in mata kuliah
+      const mkRef = doc(db, "mata_kuliah", mataKuliahId);
+      const mkDoc = await getDoc(mkRef);
+      await updateDoc(mkRef, {
+        totalCourses: (mkDoc.data().totalCourses || 0) + 1
+      });
+      alert('Course berhasil ditambahkan');
+      viewCourses(mataKuliahId);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  });
+}
+
+async function editCourse(mataKuliahId, courseId) {
+  // Implement edit course form
+  alert('Edit course dengan ID: ' + courseId);
+}
+
+async function deleteCourse(mataKuliahId, courseId) {
+  if (confirm('Hapus course ini? Semua soal di dalamnya akan ikut terhapus.')) {
+    try {
+      // First, delete all soal in the course
+      const soalSnap = await getDocs(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"));
+      const deleteSoalPromises = soalSnap.docs.map(soalDoc => 
+        deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal", soalDoc.id))
+      );
+      await Promise.all(deleteSoalPromises);
+      // Then delete the course
+      await deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId));
+      // Update totalCourses in mata kuliah
+      const mkRef = doc(db, "mata_kuliah", mataKuliahId);
+      const mkDoc = await getDoc(mkRef);
+      await updateDoc(mkRef, {
+        totalCourses: (mkDoc.data().totalCourses || 0) - 1
+      });
+      alert('Course berhasil dihapus');
+      viewCourses(mataKuliahId);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  }
+}
+
+function renderAddSoalForm(mataKuliahId, courseId) {
+  const mainView = document.getElementById('mainView');
+  mainView.innerHTML = `
+    <h2>Tambah Soal</h2>
+    <form id="addSoalForm">
+      <textarea id="pertanyaan" placeholder="Pertanyaan" required></textarea>
+      <input type="text" id="pilihanA" placeholder="Pilihan A" required>
+      <input type="text" id="pilihanB" placeholder="Pilihan B" required>
+      <input type="text" id="pilihanC" placeholder="Pilihan C" required>
+      <input type="text" id="pilihanD" placeholder="Pilihan D" required>
+      <select id="jawaban" required>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+        <option value="D">D</option>
+      </select>
+      <textarea id="explanation" placeholder="Penjelasan (opsional)"></textarea>
+      <button type="submit">Simpan</button>
+    </form>
+  `;
+
+  document.getElementById('addSoalForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pertanyaan = document.getElementById('pertanyaan').value;
+    const pilihan = {
+      A: document.getElementById('pilihanA').value,
+      B: document.getElementById('pilihanB').value,
+      C: document.getElementById('pilihanC').value,
+      D: document.getElementById('pilihanD').value
+    };
+    const jawaban = document.getElementById('jawaban').value;
+    const explanation = document.getElementById('explanation').value;
+    try {
+      await addDoc(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal"), {
+        pertanyaan,
+        pilihan,
+        jawaban,
+        explanation,
+        createdAt: Timestamp.now()
+      });
+      // Update totalSoal in course
+      const courseRef = doc(db, "mata_kuliah", mataKuliahId, "courses", courseId);
+      const courseDoc = await getDoc(courseRef);
+      await updateDoc(courseRef, {
+        totalSoal: (courseDoc.data().totalSoal || 0) + 1
+      });
+      alert('Soal berhasil ditambahkan');
+      viewSoal(mataKuliahId, courseId);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  });
+}
+
+async function editSoal(mataKuliahId, courseId, soalId) {
+  // Implement edit soal form
+  alert('Edit soal dengan ID: ' + soalId);
+}
+
+async function deleteSoal(mataKuliahId, courseId, soalId) {
+  if (confirm('Hapus soal ini?')) {
+    try {
+      await deleteDoc(doc(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal", soalId));
+      // Update totalSoal in course
+      const courseRef = doc(db, "mata_kuliah", mataKuliahId, "courses", courseId);
+      const courseDoc = await getDoc(courseRef);
+      await updateDoc(courseRef, {
+        totalSoal: (courseDoc.data().totalSoal || 0) - 1
+      });
+      alert('Soal berhasil dihapus');
+      viewSoal(mataKuliahId, courseId);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  }
+}
+
+// Auth state listener
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // Check if user is admin? (optional)
+    renderAdminDashboard();
+  } else {
+    renderLogin();
+  }
 });
+
+// Initialize
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Already handled by onAuthStateChanged
+  });
+} else {
+  // Already loaded
+}
