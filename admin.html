@@ -3,73 +3,96 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Admin — Kelola Soal</title>
+    <title>Admin — Kelola Mata Kuliah, Course, dan Soal</title>
     <link rel="stylesheet" href="style.css" />
+    <style>
+        /* Loading animation */
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Fallback styles jika JS dimatikan */
+        .no-js-message {
+            display: none;
+            padding: 40px;
+            text-align: center;
+            color: var(--text-primary);
+        }
+        
+        .no-js .no-js-message {
+            display: block;
+        }
+        
+        .no-js #app-root {
+            display: none;
+        }
+    </style>
 </head>
-<body>
-    <div class="app admin-app">
-        <header class="topbar">
-            <h1>Admin Panel</h1>
-            <div class="top-actions">
-                <button id="themeToggleAdmin" class="btn circle">☾</button>
-                <a class="btn" href="index.html">Public</a>
-            </div>
-        </header>
-
-        <main class="container admin-container">
-            <aside class="card panel left-panel">
-                <h3>Status Admin</h3>
-                <div id="adminAuthBox" class="stack">
-                    <div id="adminStatus" class="muted">Belum login</div>
-                    <form id="adminLoginForm" class="stack">
-                        <input id="adminEmail" placeholder="email admin (dashboard)" />
-                        <input id="adminPass" placeholder="password" type="password"/>
-                        <div class="actions-row">
-                            <button type="submit" class="btn primary">Login Admin</button>
-                        </div>
-                    </form>
-                    <div class="actions-row" style="margin-top:8px;">
-                        <button id="adminLogoutBtn" class="btn" style="display:none">Logout</button>
-                    </div>
-                </div>
-
-                <hr />
-
-                <h3>Daftar Soal</h3>
-                <div id="adminQuestionsList" class="list scrollable"></div>
-            </aside>
-
-            <section class="card panel right-panel">
-                <h3>Tambah Soal (Admin)</h3>
-                <form id="addQuestionForm" class="stack">
-                    <textarea id="q_text" placeholder="Pertanyaan..." required></textarea>
-                    <input id="q_a" placeholder="Pilihan A" required/>
-                    <input id="q_b" placeholder="Pilihan B" required/>
-                    <input id="q_c" placeholder="Pilihan C" required/>
-                    <input id="q_d" placeholder="Pilihan D" required/>
-                    <select id="q_answer">
-                        <option value="A">Jawaban benar: A</option>
-                        <option value="B">Jawaban benar: B</option>
-                        <option value="C">Jawaban benar: C</option>
-                        <option value="D">Jawaban benar: D</option>
-                    </select>
-                    <input id="q_explain" placeholder="Penjelasan jawaban (opsional)" />
-                    <div class="actions-row">
-                        <button type="submit" class="btn primary">Tambah Soal</button>
-                    </div>
-                </form>
-
-                <hr />
-                <h4>Catatan</h4>
-                <p class="muted">Login admin diperlukan untuk menambah, mengedit, dan menghapus soal via Firebase API. Kamu bisa juga memakai Dashboard Firebase untuk CRUD langsung.</p>
-            </section>
-        </main>
-
-        <footer class="footer">
-            <small>Admin Panel — Kelola soal lewat API Firebase</small>
-        </footer>
+<body class="no-js">
+    <!-- Pesan jika JavaScript dinonaktifkan -->
+    <div class="no-js-message">
+        <h2>JavaScript Diperlukan</h2>
+        <p>Admin Panel memerlukan JavaScript untuk berfungsi. Silakan aktifkan JavaScript di browser Anda.</p>
+        <p><a href="index.html" class="btn btn-primary">Kembali ke Halaman Utama</a></p>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <!-- Container utama -->
+    <div id="app-root">
+        <!-- Loading state -->
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; gap: 20px;">
+            <div class="loading-spinner"></div>
+            <p style="color: var(--text-muted);">Memuat Admin Panel...</p>
+        </div>
+    </div>
+
+    <script>
+        // Hapus kelas no-js saat JavaScript aktif
+        document.body.classList.remove('no-js');
+        
+        // Deteksi error loading module
+        window.addEventListener('error', function(e) {
+            const appRoot = document.getElementById('app-root');
+            if (appRoot && e.target.tagName === 'SCRIPT' && e.target.src.includes('admin-firebase.js')) {
+                appRoot.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: var(--danger-color);">
+                        <h2>Error Memuat Modul</h2>
+                        <p>Terjadi kesalahan saat memuat Admin Panel. Pastikan file admin-firebase.js tersedia.</p>
+                        <p><a href="index.html" class="btn btn-primary">Kembali ke Halaman Utama</a></p>
+                        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 20px;">
+                            Error: ${e.message || 'Unknown error'}
+                        </p>
+                    </div>
+                `;
+            }
+        });
+        
+        // Timeout untuk loading terlalu lama
+        setTimeout(() => {
+            const loadingDiv = document.querySelector('#app-root > div');
+            if (loadingDiv && loadingDiv.innerHTML.includes('Memuat Admin Panel')) {
+                loadingDiv.innerHTML += `
+                    <p style="color: var(--warning-color); font-size: 0.875rem; margin-top: 10px;">
+                        Memakan waktu lebih lama dari biasanya...<br>
+                        <button onclick="location.reload()" style="background: none; border: none; color: var(--primary-color); cursor: pointer; text-decoration: underline;">
+                            Coba refresh halaman
+                        </button>
+                    </p>
+                `;
+            }
+        }, 5000);
+    </script>
+
+    <!-- Skrip admin-firebase.js akan membangun seluruh UI -->
+    <script type="module" src="admin-firebase.js"></script>
 </body>
 </html>
