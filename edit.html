@@ -5,58 +5,410 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QuizApp - Admin Dashboard</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
-<body>
+<body data-theme="light">
     <div class="app">
+        <!-- Header -->
         <header class="topbar">
-            <h1>⚙️ Admin Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #25D366, #128C7E); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-cogs" style="color: white; font-size: 18px;"></i>
+                </div>
+                <div>
+                    <h1>Admin Dashboard</h1>
+                    <p class="muted" style="font-size: 12px; margin-top: 2px;" id="userInfo">Loading...</p>
+                </div>
+            </div>
             <div class="top-actions">
-                <button id="themeToggle" class="btn circle">☾</button>
-                <button id="logoutBtn" class="btn">Logout</button>
-                <a class="btn" href="index.html">Home</a>
+                <button id="refreshBtn" class="btn secondary">
+                    <i class="fas fa-redo"></i> Refresh
+                </button>
+                <button id="logoutBtn" class="btn secondary">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+                <a href="index.html" class="btn primary">
+                    <i class="fas fa-eye"></i> View Site
+                </a>
             </div>
         </header>
 
+        <!-- Main Content -->
         <main class="container">
             <div class="admin-container">
                 <!-- Sidebar -->
                 <aside class="left-panel card">
-                    <h3>Menu Admin</h3>
-                    <div class="menu">
-                        <button class="menu-btn active" data-view="mata-kuliah">📚 Mata Kuliah</button>
-                        <button class="menu-btn" data-view="courses">📂 Courses</button>
-                        <button class="menu-btn" data-view="soal">📝 Soal</button>
-                        <button class="menu-btn" data-view="stats">📊 Statistik</button>
+                    <h3><i class="fas fa-bars"></i> Menu</h3>
+                    <div class="menu" style="margin: 20px 0;">
+                        <button class="menu-btn active" data-view="mata-kuliah">
+                            <i class="fas fa-book"></i> Mata Kuliah
+                        </button>
+                        <button class="menu-btn" data-view="courses">
+                            <i class="fas fa-folder"></i> Courses
+                        </button>
+                        <button class="menu-btn" data-view="soal">
+                            <i class="fas fa-question-circle"></i> Soal
+                        </button>
+                        <button class="menu-btn" data-view="stats">
+                            <i class="fas fa-chart-bar"></i> Statistik
+                        </button>
                     </div>
                     
                     <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                        <p class="muted" id="userEmail"></p>
-                        <button id="refreshBtn" class="btn" style="width: 100%; margin-top: 10px;">
-                            🔄 Refresh Data
-                        </button>
+                        <h4><i class="fas fa-info-circle"></i> Info</h4>
+                        <div class="stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Mata Kuliah</span>
+                                <span class="stat-value" id="totalMataKuliah">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Courses</span>
+                                <span class="stat-value" id="totalCourses">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Soal</span>
+                                <span class="stat-value" id="totalSoal">0</span>
+                            </div>
+                        </div>
                     </div>
                 </aside>
 
-                <!-- Main Content -->
+                <!-- Main Panel -->
                 <section class="right-panel card">
-                    <div id="contentTitle">
-                        <h2>Dashboard Admin</h2>
-                        <p class="muted" id="contentSubtitle">Selamat datang di panel admin</p>
+                    <div class="content-header">
+                        <div>
+                            <h2 id="contentTitle">Dashboard Admin</h2>
+                            <p class="muted" id="contentSubtitle">Kelola data quiz Anda</p>
+                        </div>
+                        <div id="actionButtons" style="display: flex; gap: 8px;">
+                            <!-- Action buttons will be added dynamically -->
+                        </div>
                     </div>
                     
-                    <div id="adminContent">
+                    <div id="adminContent" class="admin-content">
                         <!-- Content will be loaded here -->
-                        <p class="muted">Pilih menu di sebelah kiri untuk mulai mengelola</p>
+                        <div style="text-align: center; padding: 60px 20px;">
+                            <div class="spinner"></div>
+                            <p style="margin-top: 20px; color: var(--text-muted);">Memuat dashboard...</p>
+                        </div>
                     </div>
                 </section>
             </div>
         </main>
 
+        <!-- Footer -->
         <footer class="footer">
-            <small>© 2024 QuizApp • Admin Dashboard</small>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <small>© 2024 QuizApp • Admin Dashboard</small>
+                <div class="muted" style="font-size: 12px;">
+                    <span id="lastUpdated">Terakhir diupdate: -</span>
+                </div>
+            </div>
         </footer>
+        
+        <!-- Theme Toggle -->
+        <button id="themeToggle" class="theme-switcher">
+            <i class="fas fa-moon"></i>
+        </button>
+        
+        <!-- Modal for Forms -->
+        <div id="modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Modal Title</h3>
+                    <button class="modal-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Modal content will be added here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="edit.js"></script>
+    
+    <style>
+        .admin-container {
+            display: flex;
+            gap: 20px;
+            min-height: 70vh;
+        }
+        
+        .left-panel {
+            width: 280px;
+            min-width: 280px;
+        }
+        
+        .right-panel {
+            flex: 1;
+        }
+        
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .menu-btn {
+            padding: 12px 16px;
+            text-align: left;
+            border: none;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+        
+        .menu-btn:hover {
+            background: var(--hover-color);
+        }
+        
+        .menu-btn.active {
+            background: #25D366;
+            color: white;
+        }
+        
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .admin-content {
+            min-height: 500px;
+        }
+        
+        .stats {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .stat-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .modal-close:hover {
+            background: var(--hover-color);
+            color: var(--text-primary);
+        }
+        
+        .modal-body {
+            padding: 24px;
+        }
+        
+        /* Form Styles in Modal */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #25D366;
+            box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.2);
+        }
+        
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Table Styles */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .data-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .data-table tr:hover {
+            background: var(--hover-color);
+        }
+        
+        .data-table .actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+        
+        .btn-danger {
+            background: #ff3b30;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #e0352b;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+            .admin-container {
+                flex-direction: column;
+            }
+            
+            .left-panel {
+                width: 100%;
+            }
+            
+            .content-header {
+                flex-direction: column;
+                gap: 16px;
+            }
+            
+            .modal-content {
+                margin: 10px;
+            }
+        }
+    </style>
 </body>
 </html>
