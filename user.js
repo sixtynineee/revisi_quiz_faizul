@@ -1,5 +1,5 @@
 // =========================
-// USER.JS — PATCHED (dark mode, confirm finish, clearer selection + results)
+// USER.JS — REVISED (score top+bottom, readable selection, confirm finish)
 // =========================
 
 // Firebase Config
@@ -21,12 +21,17 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // =========================
-// UTILITIES
+// HELPERS
 // =========================
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
 
-// Shuffle array (Fisher–Yates)
+function escapeHtml(s) {
+  return String(s || "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
+
 function shuffle(arr) {
-  let a = arr ? arr.slice() : [];
+  let a = Array.isArray(arr) ? arr.slice() : [];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
@@ -34,105 +39,91 @@ function shuffle(arr) {
   return a;
 }
 
-// Safe query selector helper
-const $ = sel => document.querySelector(sel);
-
 // =========================
-// LOAD COURSES
+// FIRESTORE LOADERS
 // =========================
-
 async function loadCourses() {
   try {
     const snap = await getDocs(collection(db, "courses"));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.warn("Firestore error", err);
+  } catch (e) {
+    console.warn("Firestore loadCourses error", e);
     return [];
   }
 }
 
-async function loadCourse(courseId) {
-  try {
-    const list = await loadCourses();
-    return list.find(c => c.id === courseId) || null;
-  } catch (e) {
-    return null;
-  }
+async function loadCourseById(id) {
+  const list = await loadCourses();
+  return list.find(c => c.id === id) || null;
 }
+
+// =========================
+// STATE
+// =========================
+let CURRENT_COURSE = null;
+let USER_ANSWERS = {}; // idx -> 'A'|'B'...
+let QUIZ_DONE = false;
 
 // =========================
 // RENDER COURSES
 // =========================
-
 async function renderCourses() {
-  const list = await loadCourses();
-  const container = $("#coursesList");
-  if (!container) return;
-  container.innerHTML = "";
-
-  if (!list || list.length === 0) {
-    container.innerHTML = `<div class="muted">Belum ada mata kuliah.</div>`;
+  const courses = await loadCourses();
+  const root = $("#coursesList");
+  if (!root) return;
+  root.innerHTML = "";
+  if (!courses.length) {
+    root.innerHTML = `<div class="muted">Belum ada mata kuliah.</div>`;
     return;
   }
-
-  list.forEach(course => {
-    const qCount = Array.isArray(course.questions) ? course.questions.length : 0;
-    const item = document.createElement("div");
-    item.className = "course-item";
-    item.innerHTML = `
+  courses.forEach(c => {
+    const qCount = Array.isArray(c.questions) ? c.questions.length : 0;
+    const el = document.createElement("div");
+    el.className = "course-item";
+    el.innerHTML = `
       <div class="left">
-        <div class="course-badge">${(course.name||'')[0] || ''}</div>
+        <div class="course-badge">${escapeHtml((c.name||'')[0]||'')}</div>
         <div>
-          <b>${course.name || 'Untitled'}</b><br>
+          <b>${escapeHtml(c.name||'Untitled')}</b><br>
           <span class="muted">${qCount} soal</span>
         </div>
       </div>
-      <button class="btn primary" data-id="${course.id}">Mulai</button>
+      <button class="btn primary" data-id="${c.id}">Mulai</button>
     `;
-    container.appendChild(item);
+    root.appendChild(el);
   });
-
-  document.querySelectorAll(".course-item button").forEach(btn => {
-    btn.onclick = () => startQuiz(btn.dataset.id);
-  });
+  $$(".course-item button").forEach(btn => btn.onclick = () => startQuiz(btn.dataset.id));
 }
 
 // =========================
 // START QUIZ
 // =========================
-
-let CURRENT_COURSE = null;
-let USER_ANSWERS = {}; // idx -> 'A'|'B'|'C'|'D'
-let QUIZ_DONE = false;
-
 async function startQuiz(courseId) {
-  CURRENT_COURSE = await loadCourse(courseId);
+  CURRENT_COURSE = await loadCourseById(courseId);
   if (!CURRENT_COURSE) return;
 
-  // Normalize questions array
-  const rawQs = Array.isArray(CURRENT_COURSE.questions) ? CURRENT_COURSE.questions.slice() : [];
+  // ensure questions array exists
+  const raw = Array.isArray(CURRENT_COURSE.questions) ? CURRENT_COURSE.questions.slice() : [];
 
-  // Shuffle question order
-  let shuffledQs = shuffle(rawQs);
+  // shuffle questions
+  let qs = shuffle(raw);
 
-  // For each question, shuffle options but remap correct key
-  shuffledQs = shuffledQs.map(q => {
+  // for each question, shuffle options and remap correct key
+  qs = qs.map(q => {
     const ops = [
-      { key: "A", text: q.options?.A ?? "" , originalKey: "A" },
-      { key: "B", text: q.options?.B ?? "" , originalKey: "B" },
-      { key: "C", text: q.options?.C ?? "" , originalKey: "C" },
-      { key: "D", text: q.options?.D ?? "" , originalKey: "D" }
+      { orig: "A", text: q.options?.A ?? "" },
+      { orig: "B", text: q.options?.B ?? "" },
+      { orig: "C", text: q.options?.C ?? "" },
+      { orig: "D", text: q.options?.D ?? "" }
     ];
     const shuffled = shuffle(ops);
-    // find index where original correct sits
-    const correctIndex = shuffled.findIndex(o => o.originalKey === (q.correct || "A"));
+    const correctOrig = q.correct || "A";
+    const correctIndex = shuffled.findIndex(x => x.orig === correctOrig);
     const newCorrectKey = ["A","B","C","D"][correctIndex];
-    // Build mapped options A-D
     const mapped = {};
-    ["A","B","C","D"].forEach((k, i) => mapped[k] = shuffled[i].text);
+    ["A","B","C","D"].forEach((k,i) => mapped[k] = shuffled[i].text);
     return {
       ...q,
-      // ensure question text exists
       question: q.question || q.pertanyaan || "",
       options: mapped,
       correct: newCorrectKey,
@@ -140,11 +131,11 @@ async function startQuiz(courseId) {
     };
   });
 
-  CURRENT_COURSE.questions = shuffledQs;
+  CURRENT_COURSE.questions = qs;
   USER_ANSWERS = {};
   QUIZ_DONE = false;
 
-  // swap views
+  // UI switches
   $("#coursesSection") && ($("#coursesSection").style.display = "none");
   $("#quizSection") && ($("#quizSection").style.display = "block");
   $("#resultSection") && ($("#resultSection").style.display = "none");
@@ -155,124 +146,114 @@ async function startQuiz(courseId) {
 }
 
 // =========================
-// RENDER QUIZ VIEW
+// RENDER QUIZ VIEW + TOP SCORE BAR
 // =========================
-
 function renderQuizView() {
   USER_ANSWERS = {};
   QUIZ_DONE = false;
 
-  const box = $("#quizContainer");
-  if (!box) return;
-  box.innerHTML = "";
-
-  const qs = Array.isArray(CURRENT_COURSE.questions) ? CURRENT_COURSE.questions : [];
-
-  if (qs.length === 0) {
-    box.innerHTML = `<div class="muted">Tidak ada soal untuk materi ini.</div>`;
-    return;
+  const topbarEl = $("#quizTopBar");
+  if (topbarEl) {
+    // show progress (answered/total) and placeholder for top score (will update after finish)
+    topbarEl.innerHTML = `
+      <div class="quiz-topbar">
+        <div class="quiz-info">
+          <strong id="quizTitleTop">${escapeHtml(CURRENT_COURSE.name || '')}</strong>
+          <div class="quiz-progress" id="quizProgressTop">0 / ${CURRENT_COURSE.questions.length} dijawab</div>
+        </div>
+        <div id="quizScoreTop" style="min-width:110px;text-align:right;color:var(--muted,#6b7280)"></div>
+      </div>
+    `;
   }
 
-  qs.forEach((q, idx) => {
+  const cont = $("#quizContainer");
+  if (!cont) return;
+  cont.innerHTML = "";
+
+  (CURRENT_COURSE.questions || []).forEach((q, idx) => {
     const card = document.createElement("div");
     card.className = "question-card";
     card.dataset.idx = idx;
 
-    // build choices HTML
-    const choicesHtml = ["A","B","C","D"].map(opt => `
-      <div class="choice" data-opt="${opt}" data-id="${idx}" role="button" tabindex="0" style="user-select:none;">
-        <span class="label">${opt}.</span>
-        <span class="text">${escapeHtml(q.options?.[opt] ?? "")}</span>
+    const choicesHtml = ["A","B","C","D"].map(k => `
+      <div class="choice" data-opt="${k}" data-id="${idx}" role="button" tabindex="0">
+        <span class="label">${k}.</span>
+        <span class="text">${escapeHtml(q.options[k] ?? "")}</span>
       </div>
     `).join("");
 
     card.innerHTML = `
       <div class="q-text"><b>${idx + 1}.</b> ${escapeHtml(q.question)}</div>
-      <div class="choices" id="choices-${idx}">
-        ${choicesHtml}
-      </div>
-      <div class="explanation muted" id="exp-${idx}" style="display:none; margin-top:8px;">
-        ${escapeHtml(q.explanation || "Tidak ada penjelasan.")}
-      </div>
+      <div class="choices" id="choices-${idx}">${choicesHtml}</div>
+      <div class="explanation" id="exp-${idx}" style="display:none;">${escapeHtml(q.explanation || "Tidak ada penjelasan.")}</div>
     `;
-
-    box.appendChild(card);
+    cont.appendChild(card);
   });
 
   attachChoiceEvents();
-
-  // Ensure finish button visible
-  const finishBtn = $("#finishQuizBtn");
-  if (finishBtn) {
-    finishBtn.style.display = "inline-block";
-  }
-  // Clear result box
-  const resultBox = $("#resultBox");
-  if (resultBox) resultBox.innerHTML = "";
-}
-
-// escapeHtml helper to avoid XSS injections if any dynamic text
-function escapeHtml(s) {
-  return String(s || "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+  updateProgressTop();
+  // ensure finish button visible
+  const fb = $("#finishQuizBtn"); if (fb) fb.style.display = "inline-block";
 }
 
 // =========================
-// CLICK HANDLERS
+// CHOICE HANDLERS
 // =========================
-
 function attachChoiceEvents() {
-  document.querySelectorAll(".choice").forEach(choice => {
-    // keyboard + click support
-    choice.onclick = () => onChoiceSelect(choice);
-    choice.onkeypress = (e) => { if (e.key === 'Enter' || e.key === ' ') onChoiceSelect(choice); };
+  $$(".choice").forEach(el => {
+    el.onclick = () => onSelectChoice(el);
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") onSelectChoice(el); };
   });
 }
 
-function onChoiceSelect(choiceEl) {
-  if (QUIZ_DONE) return; // lock when finished
+function onSelectChoice(el) {
+  if (QUIZ_DONE) return;
+  const idx = parseInt(el.dataset.id, 10);
+  const opt = el.dataset.opt;
 
-  const opt = choiceEl.dataset.opt;
-  const idx = parseInt(choiceEl.dataset.id);
-
-  // Save answer
+  // store
   USER_ANSWERS[idx] = opt;
 
-  // Visual: remove chosen from siblings, then highlight this one
-  const group = document.querySelectorAll(`#choices-${idx} .choice`);
+  // visual reset group
+  const group = $(`#choices-${idx}`) ? $(`#choices-${idx}`).querySelectorAll(".choice") : [];
   group.forEach(c => {
     c.classList.remove("chosen");
-    // reset inline highlight style
-    c.style.background = "";
-    c.style.borderColor = "";
-    c.style.opacity = "1";
+    // reset styles to default (CSS ensures text color)
+    c.removeAttribute("aria-disabled");
   });
 
-  // Mark chosen: subtle greenish highlight while answering
-  choiceEl.classList.add("chosen");
-  choiceEl.style.background = "#e6f4ea"; // light green
-  choiceEl.style.borderColor = "#34d399";
+  // highlight chosen (soft bg, keep text dark)
+  el.classList.add("chosen");
+  el.setAttribute("aria-pressed", "true");
+
+  updateProgressTop();
+}
+
+function updateProgressTop() {
+  const total = (CURRENT_COURSE.questions || []).length;
+  const answered = Object.keys(USER_ANSWERS).length;
+  const progressEl = $("#quizProgressTop");
+  if (progressEl) progressEl.textContent = `${answered} / ${total} dijawab`;
+
+  // if finished, top score will be set in finishQuiz
 }
 
 // =========================
-// FINISH QUIZ (with confirmation)
+// FINISH (confirm + show results top+bottom)
 // =========================
-
 function finishConfirm() {
-  if (QUIZ_DONE) return; // already done
-  // if user hasn't answered any question, warn
-  const anyAnswered = Object.keys(USER_ANSWERS).length > 0;
-  let msg = "Apakah Anda yakin ingin menyelesaikan kuis?\n\n";
-  msg += anyAnswered ? "Tekan OK untuk menyelesaikan dan melihat hasil, atau Cancel untuk kembali memeriksa jawaban." : "Anda belum memilih jawaban apapun. Tekan OK untuk menyelesaikan (jawaban kosong dianggap salah) atau Cancel untuk memeriksa soal.";
-  const ok = confirm(msg);
-  if (ok) {
-    finishQuiz();
-  } else {
-    // do nothing, let user review
-  }
+  if (QUIZ_DONE) return;
+  const any = Object.keys(USER_ANSWERS).length > 0;
+  const msg = any ?
+    "Anda akan menyelesaikan kuis. Tekan OK untuk melihat hasil atau Cancel untuk memeriksa kembali jawaban." :
+    "Anda belum memilih jawaban apapun. Tekan OK untuk menyelesaikan (jawaban kosong dianggap salah) atau Cancel untuk memeriksa.";
+  if (confirm(msg)) finishQuiz();
 }
 
 function finishQuiz() {
+  if (QUIZ_DONE) return;
   QUIZ_DONE = true;
+
   const qs = CURRENT_COURSE.questions || [];
   let score = 0;
 
@@ -280,131 +261,116 @@ function finishQuiz() {
     const correct = q.correct;
     const user = USER_ANSWERS[idx];
 
-    const group = document.querySelectorAll(`#choices-${idx} .choice`);
-    // visually disable group
-    const container = document.getElementById(`choices-${idx}`);
-    if (container) container.style.pointerEvents = "none"; // disable pointer
+    const container = $(`#choices-${idx}`);
+    if (container) container.style.pointerEvents = "none"; // lock
+
+    const group = container ? Array.from(container.querySelectorAll(".choice")) : [];
 
     group.forEach(c => {
       const opt = c.dataset.opt;
-
-      // clear transient chosen style
+      // reset chosen style to avoid confusion
       c.classList.remove("chosen");
-      c.style.background = "";
-      c.style.borderColor = "";
-
+      c.removeAttribute("aria-pressed");
       if (opt === correct) {
-        // correct answer highlight
         c.classList.add("final-correct");
-        c.style.background = "#d1fae5"; // green
-        c.style.borderColor = "#34d399";
+        c.setAttribute("aria-disabled", "true");
       } else if (opt === user) {
-        // user's chosen but wrong
         c.classList.add("final-wrong");
-        c.style.background = "#fee2e2"; // red-ish
-        c.style.borderColor = "#f87171";
+        c.setAttribute("aria-disabled", "true");
       } else {
-        // de-emphasize other options
-        c.style.opacity = "0.85";
+        // leave other options neutral, slight fade via CSS if desired
+        c.style.opacity = "0.92";
       }
     });
 
     // show explanation
-    const exp = document.getElementById(`exp-${idx}`);
+    const exp = $(`#exp-${idx}`);
     if (exp) exp.style.display = "block";
 
     if (user === correct) score++;
   });
 
-  // show result summary in resultBox and show resultSection
+  // show top score and result box
+  const topScore = $("#quizScoreTop");
+  const total = qs.length;
+  const percent = total ? Math.round((score/total)*100) : 0;
+  if (topScore) topScore.innerHTML = `<strong>Skor: ${score}/${total}</strong> (${percent}%)`;
+
   const resultBox = $("#resultBox");
   if (resultBox) {
-    const total = qs.length;
-    const percent = total ? Math.round((score/total) * 100) : 0;
     resultBox.innerHTML = `
-      <div class="result-row" style="margin-bottom:8px">
+      <div class="result-row">
         <strong>Skor:</strong> ${score}/${total} (${percent}%)
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;margin-top:8px;">
         <button id="resultBack" class="btn ghost">Kembali ke Mata Kuliah</button>
         <button id="resultRetry" class="btn">Ulangi</button>
       </div>
     `;
-    // show result panel if exists
     $("#resultSection") && ($("#resultSection").style.display = "block");
   }
 
-  // hide finish button after done
-  const finishBtn = $("#finishQuizBtn");
-  if (finishBtn) finishBtn.style.display = "none";
+  // hide finish button
+  const fb = $("#finishQuizBtn"); if (fb) fb.style.display = "none";
 
   // wire result buttons
   const backBtn = $("#resultBack");
   if (backBtn) backBtn.onclick = () => {
-    // go back to course list
+    // reset to course list
     $("#coursesSection") && ($("#coursesSection").style.display = "block");
     $("#quizSection") && ($("#quizSection").style.display = "none");
     $("#resultSection") && ($("#resultSection").style.display = "none");
-    // reset states
     CURRENT_COURSE = null;
     USER_ANSWERS = {};
     QUIZ_DONE = false;
+    // clear top score
+    const topScoreEl = $("#quizScoreTop"); if (topScoreEl) topScoreEl.textContent = "";
   };
 
   const retryBtn = $("#resultRetry");
   if (retryBtn) retryBtn.onclick = () => {
-    // rebuild quiz same course (reshuffle)
+    // restart same course (reshuffle)
     startQuiz(CURRENT_COURSE.id);
-    // hide result
     $("#resultSection") && ($("#resultSection").style.display = "none");
   };
 }
 
 // =========================
-// BUTTONS & THEME
+// UI BINDINGS + THEME (persisted)
 // =========================
-
 $("#finishQuizBtn") && ($("#finishQuizBtn").onclick = finishConfirm);
 
 $("#backToCourses") && ($("#backToCourses").onclick = () => {
   $("#coursesSection") && ($("#coursesSection").style.display = "block");
   $("#quizSection") && ($("#quizSection").style.display = "none");
   $("#resultSection") && ($("#resultSection").style.display = "none");
-  CURRENT_COURSE = null;
-  USER_ANSWERS = {};
-  QUIZ_DONE = false;
+  CURRENT_COURSE = null; USER_ANSWERS = {}; QUIZ_DONE = false;
 });
 
 $("#backHome") && ($("#backHome").onclick = () => {
   $("#coursesSection") && ($("#coursesSection").style.display = "block");
   $("#quizSection") && ($("#quizSection").style.display = "none");
   $("#resultSection") && ($("#resultSection").style.display = "none");
+  CURRENT_COURSE = null; USER_ANSWERS = {}; QUIZ_DONE = false;
 });
 
-// THEME: store 'dark' or 'light' string for clarity
+// Theme: store "dark" or "light"
 function applyThemeFromStorage() {
   const saved = localStorage.getItem("theme") || "light";
   if (saved === "dark") document.body.classList.add("dark");
   else document.body.classList.remove("dark");
-
-  // if toggle element exists, update its label (optional)
-  const themeToggle = $("#themeToggle");
-  if (themeToggle) themeToggle.textContent = document.body.classList.contains("dark") ? '☀' : '☾';
+  const t = $("#themeToggle"); if (t) t.textContent = document.body.classList.contains("dark") ? '☀' : '☾';
 }
-
 function wireThemeToggle() {
-  const el = $("#themeToggle");
-  if (!el) return;
+  const el = $("#themeToggle"); if (!el) return;
   el.onclick = () => {
     const isDark = document.body.classList.toggle("dark");
     localStorage.setItem("theme", isDark ? "dark" : "light");
     el.textContent = isDark ? '☀' : '☾';
   };
 }
-
-// run theme init
 applyThemeFromStorage();
 wireThemeToggle();
 
-// Load courses on startup
+// initial load
 renderCourses();
