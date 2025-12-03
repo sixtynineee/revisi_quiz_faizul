@@ -1,173 +1,75 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin — Quiz Manager</title>
-
-  <link rel="stylesheet" href="style.css" />
-
-  <style>
-    .admin-panel { display:flex; gap:16px; align-items:flex-start; }
-    .admin-list { width:100%; display:flex; flex-direction:column; gap:12px; }
-    .admin-actions { display:flex; gap:8px; align-items:center; }
-    .admin-item { display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:8px; background:var(--card); border:1px solid var(--glass); }
-    .panel { display:none; margin-top:12px; }
-    .panel.active { display:block; }
-    .panel h3 { margin:0 0 8px 0 }
-  </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin — Kelola Soal</title>
+    <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div class="app admin-app">
+    <div class="app admin-app">
+        <header class="topbar">
+            <h1>Admin Panel</h1>
+            <div class="top-actions">
+                <button id="themeToggleAdmin" class="btn circle">☾</button>
+                <a class="btn" href="index.html">Public</a>
+            </div>
+        </header>
 
-  <!-- ========== HEADER ========== -->
-  <header class="topbar">
-    <h1>Admin Panel</h1>
-    <div class="top-actions">
-      <label style="display:flex;align-items:center;gap:8px">
-        <input id="themeToggleAdmin" type="checkbox" style="display:none" />
-        <button id="themeBtnAdmin" class="btn circle">☾</button>
-      </label>
-      <a class="btn" href="index.html">Public</a>
+        <main class="container admin-container">
+            <aside class="card panel left-panel">
+                <h3>Status Admin</h3>
+                <div id="adminAuthBox" class="stack">
+                    <div id="adminStatus" class="muted">Belum login</div>
+                    <form id="adminLoginForm" class="stack">
+                        <input id="adminEmail" placeholder="email admin (dashboard)" />
+                        <input id="adminPass" placeholder="password" type="password"/>
+                        <div class="actions-row">
+                            <button type="submit" class="btn primary">Login Admin</button>
+                        </div>
+                    </form>
+                    <div class="actions-row" style="margin-top:8px;">
+                        <button id="adminLogoutBtn" class="btn" style="display:none">Logout</button>
+                    </div>
+                </div>
+
+                <hr />
+
+                <h3>Daftar Soal</h3>
+                <div id="adminQuestionsList" class="list scrollable"></div>
+            </aside>
+
+            <section class="card panel right-panel">
+                <h3>Tambah Soal (Admin)</h3>
+                <form id="addQuestionForm" class="stack">
+                    <textarea id="q_text" placeholder="Pertanyaan..." required></textarea>
+                    <input id="q_a" placeholder="Pilihan A" required/>
+                    <input id="q_b" placeholder="Pilihan B" required/>
+                    <input id="q_c" placeholder="Pilihan C" required/>
+                    <input id="q_d" placeholder="Pilihan D" required/>
+                    <select id="q_answer">
+                        <option value="A">Jawaban benar: A</option>
+                        <option value="B">Jawaban benar: B</option>
+                        <option value="C">Jawaban benar: C</option>
+                        <option value="D">Jawaban benar: D</option>
+                    </select>
+                    <input id="q_explain" placeholder="Penjelasan jawaban (opsional)" />
+                    <div class="actions-row">
+                        <button type="submit" class="btn primary">Tambah Soal</button>
+                    </div>
+                </form>
+
+                <hr />
+                <h4>Catatan</h4>
+                <p class="muted">Login admin diperlukan untuk menambah, mengedit, dan menghapus soal via Firebase API. Kamu bisa juga memakai Dashboard Firebase untuk CRUD langsung.</p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <small>Admin Panel — Kelola soal lewat API Firebase</small>
+        </footer>
     </div>
-  </header>
 
-  <!-- ========== MAIN WRAPPER ========== -->
-  <main class="container admin-container">
-
-    <!-- ========== SIDEBAR ========== -->
-    <aside id="sidebarBox" class="card left-panel wa-sidebar" style="min-width:260px; display:none;">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
-        <div class="badge" style="background:var(--accent);color:white">A</div>
-        <div>
-          <div style="font-weight:700">Admin Panel</div>
-          <div class="muted" id="adminEmailLabel">Loading…</div>
-        </div>
-      </div>
-
-      <div id="logoutWrap" style="margin-top:8px; display:none;">
-        <div class="muted">Signed in as <span id="signedEmail"></span></div>
-        <div class="actions-row" style="margin-top:8px">
-          <button id="btnLogout" class="btn ghost">Logout</button>
-        </div>
-      </div>
-
-      <hr style="border:0;border-top:1px solid rgba(255,255,255,0.03);margin:12px 0" />
-
-      <div>
-        <div style="font-weight:700;margin-bottom:8px">Menu</div>
-        <div class="menu">
-          <button data-view="dashboard" class="active">📊 Dashboard</button>
-          <button data-view="courses">📚 Mata Kuliah</button>
-          <button data-view="peserta">👥 Peserta</button>
-          <button data-view="skor">🏆 Skor</button>
-        </div>
-      </div>
-    </aside>
-
-
-    <!-- ========== LOGIN PANEL (SHOW WHEN NOT LOGGED) ========== -->
-    <section id="loginBox" class="card right-panel wa-main" style="max-width:420px; margin:auto; display:none;">
-      <h2 style="margin-bottom:18px; text-align:center;">Login Admin</h2>
-      <form id="loginForm" style="display:flex; flex-direction:column; gap:12px;">
-        <input id="loginEmail" placeholder="Email admin" type="email" required />
-        <input id="loginPass" placeholder="Password" type="password" required />
-        <button type="submit" class="btn primary">Login</button>
-      </form>
-    </section>
-
-
-    <!-- ========== MAIN ADMIN CONTENT ========== -->
-    <section id="adminMain" class="card right-panel wa-main" style="flex:1; display:none;">
-      <div class="wa-topbar wa-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px">
-        <h2 id="mainTitle" style="margin:0;font-size:18px">Dashboard</h2>
-        <div>
-          <button id="btnRefresh" class="btn ghost sm">↻</button>
-          <button id="btnNewCourse" class="btn sm" onclick="document.getElementById('addCourseBtn').click()">+ Course Baru</button>
-        </div>
-      </div>
-
-      <div id="mainContent" class="wa-card" style="padding:16px">
-        <!-- Dashboard -->
-        <div id="dashboardView">
-          <h3>Dashboard</h3>
-          <p class="muted">Gunakan menu Mata Kuliah untuk mengelola.</p>
-        </div>
-
-        <!-- Courses panel -->
-        <div id="coursesView" class="admin-panel" style="display:none; margin-top:12px">
-          <div class="admin-list" style="flex:1">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <h3 style="margin:0">Mata Kuliah</h3>
-              <button id="addCourseBtn" class="btn">+ Tambah</button>
-            </div>
-            <div id="coursesAdminList" style="margin-top:10px"></div>
-          </div>
-
-          <div style="width:360px;">
-
-            <!-- Materi Panel -->
-            <div id="materiPanel" class="panel">
-              <h3 id="materiCourseTitle">Materi</h3>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                <div class="muted">Daftar Materi</div>
-                <button id="addMateriBtn" class="btn sm">+ Materi</button>
-              </div>
-              <div id="materiList"></div>
-            </div>
-
-            <!-- Soal Panel -->
-            <div id="soalPanel" class="panel" style="margin-top:12px">
-              <h3 id="soalMateriTitle">Soal</h3>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                <div class="muted">Daftar Soal</div>
-                <button id="addSoalBtn" class="btn sm">+ Soal</button>
-              </div>
-              <div id="soalList"></div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <footer class="footer" style="padding:10px 18px;text-align:center">
-    <small>Admin Panel — Kelola Mata Kuliah, Materi & Soal</small>
-  </footer>
-</div>
-
-
-<!-- ADMIN JS -->
-<script type="module" src="admin-firebase.js"></script>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  const materiPanel = document.getElementById("materiPanel");
-  const soalPanel = document.getElementById("soalPanel");
-  materiPanel.style.display = "none";
-  soalPanel.style.display = "none";
-
-  document.querySelectorAll(".menu button").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".menu button").forEach(x => x.classList.remove("active"));
-      btn.classList.add("active");
-      const v = btn.dataset.view;
-
-      document.getElementById("mainTitle").textContent = btn.textContent.trim();
-
-      if (v === "courses") {
-        document.getElementById("coursesView").style.display = "flex";
-      } else {
-        document.getElementById("coursesView").style.display = "none";
-        materiPanel.style.display = "none";
-        soalPanel.style.display = "none";
-      }
-    });
-  });
-});
-</script>
-
+    <script type="module" src="app.js"></script>
 </body>
 </html>
