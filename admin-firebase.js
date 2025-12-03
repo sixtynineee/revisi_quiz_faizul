@@ -1,7 +1,6 @@
 // admin-firebase.js
-// Single-file admin panel script (no build). Requires style.css present.
-// Provides: Firebase Auth (admin), Firestore CRUD (courses/questions), local fallback,
-// WhatsApp-like admin UI injection, dark-mode toggle, toasts.
+// Single-file admin panel script (Revisi v2). Requires style.css present.
+// Provides: Firebase Auth, Full Firestore CRUD (Courses + Questions Management), Local fallback.
 
 // ----------------------- CONFIG (GANTI DENGAN FIREBASE MU) -----------------------
 const firebaseConfig = {
@@ -66,6 +65,8 @@ const el = (tag, attrs = {}, ...children) => {
   return e;
 };
 const qs = s => document.querySelector(s);
+const qsa = s => document.querySelectorAll(s);
+const escapeHTML = str => str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
 
 // ----------------------- Local storage helpers -----------------------
 function readLocalData() {
@@ -76,7 +77,7 @@ function readLocalData() {
 function writeLocalData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 const makeId = (p='') => p + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 
-// ----------------------- Firestore wrappers with graceful fallback -----------------------
+// ----------------------- Firestore wrappers -----------------------
 async function fetchCoursesRemote() {
   try {
     const snap = await getDocs(collection(db, "courses"));
@@ -90,19 +91,23 @@ async function fetchCoursesRemote() {
 }
 async function saveCourseRemote(course) {
   try {
-    const ref = await addDoc(collection(db, "courses"), { name: course.name, description: course.description || '', questions: course.questions || [], createdAt: Timestamp.now() });
-    return { success: true, id: ref.id };
+    // Clean undefined/null values
+    const payload = { 
+        name: course.name, 
+        description: course.description || '', 
+        questions: course.questions || [], 
+        updatedAt: Timestamp.now() 
+    };
+    if(!course.id || String(course.id).startsWith('local-')) {
+        payload.createdAt = Timestamp.now();
+        const ref = await addDoc(collection(db, "courses"), payload);
+        return { success: true, id: ref.id };
+    } else {
+        await updateDoc(doc(db, "courses", course.id), payload);
+        return { success: true, id: course.id };
+    }
   } catch (err) {
     console.warn("saveCourseRemote failed", err);
-    return { success: false };
-  }
-}
-async function updateCourseRemote(id, updates) {
-  try {
-    await updateDoc(doc(db, "courses", id), updates);
-    return { success: true };
-  } catch (err) {
-    console.warn("updateCourseRemote failed", err);
     return { success: false };
   }
 }
@@ -135,55 +140,64 @@ function toast(msg, type='info') {
   setTimeout(()=> t.remove(), 3200);
 }
 
-// ----------------------- UI building (WhatsApp-like) -----------------------
+// ----------------------- UI Injection -----------------------
 function injectStylesIfMissing() {
   if (document.getElementById('admin-inline-styles')) return;
   const s = document.createElement('style');
   s.id = 'admin-inline-styles';
   s.textContent = `
-    /* minimal local ADMIN CSS overrides to work with your style.css */
-    body { margin:0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
-    .wa-root { display:flex; min-height:100vh; gap:18px; background:var(--bg); color:var(--text); padding:18px; }
-    .wa-sidebar{ width:300px; background: #fff; border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.06); }
-    .wa-main{ flex:1; }
-    .wa-card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:14px; box-shadow: var(--soft-shadow); border:1px solid rgba(255,255,255,0.03); }
-    .muted{ color:var(--muted); font-size:13px; }
-    .menu button{ display:block; width:100%; text-align:left; margin-bottom:6px; padding:8px 10px; border-radius:8px; border:0; background:transparent; cursor:pointer; }
-    .menu button.active{ background:var(--accent); color:#fff; }
-    .course-item{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:8px; background:var(--glass); border:1px solid rgba(255,255,255,0.03); margin-bottom:8px; }
-    input,textarea,select{ width:100%; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text); margin-bottom:8px; }
-    .btn { padding:8px 12px; border-radius:8px; cursor:pointer; background:var(--accent); color:white; border:0 }
-    .btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--text) }
-    @media (max-width:900px){ .wa-root{ flex-direction:column; padding:12px } .wa-sidebar{ width:100% } }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; background:var(--bg, #f0f2f5); color:var(--text, #111b21); }
+    .wa-root { display:flex; min-height:100vh; gap:18px; padding:18px; }
+    .wa-sidebar{ width:280px; background: #fff; border-radius:12px; padding:16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); height:fit-content; }
+    .wa-main{ flex:1; display:flex; flex-direction:column; gap:18px; }
+    .wa-card{ background:#fff; border-radius:12px; padding:20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.03); }
+    .muted{ color:#667781; font-size:13px; }
+    .menu button{ display:block; width:100%; text-align:left; margin-bottom:4px; padding:10px 12px; border-radius:8px; border:0; background:transparent; cursor:pointer; font-weight:500; color:#41525d; transition:0.2s; }
+    .menu button:hover{ background:#f5f6f6; }
+    .menu button.active{ background:#e9edef; color:#111b21; }
+    .course-item{ display:flex; justify-content:space-between; align-items:center; padding:12px; border-radius:8px; background:#f0f2f5; margin-bottom:8px; border:1px solid transparent; }
+    .course-item:hover{ border-color:#d1d7db; }
+    input,textarea,select{ width:100%; padding:10px; border-radius:8px; border:1px solid #d1d7db; margin-bottom:8px; box-sizing:border-box; font-family:inherit; }
+    input:focus,textarea:focus{ outline:none; border-color:#00a884; }
+    .btn { padding:8px 16px; border-radius:24px; cursor:pointer; background:#008069; color:white; border:0; font-weight:600; font-size:14px; transition:0.2s; }
+    .btn:hover { background:#006d59; }
+    .btn.ghost { background:transparent; color:#008069; border:1px solid #d1d7db; }
+    .btn.ghost:hover { background:#f0f2f5; }
+    .btn.danger { background:#ef4444; color:white; }
+    .btn.sm { padding: 4px 10px; font-size:12px; }
+    .badge { width:40px; height:40px; border-radius:50%; background:#e9edef; display:grid; place-items:center; font-weight:700; color:#008069; flex-shrink:0; }
+    
+    /* Q List in Editor */
+    .q-row { background:#fff; padding:10px; border:1px solid #e9edef; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:flex-start; }
+    
+    @media (max-width:900px){ .wa-root{ flex-direction:column; padding:10px } .wa-sidebar{ width:100%; box-sizing:border-box; } }
   `;
   document.head.appendChild(s);
 }
 
-// Build DOM skeleton
 function buildShell() {
   injectStylesIfMissing();
   document.body.innerHTML = '';
   const root = el('div', { class: 'wa-root' });
-  const sidebar = el('aside', { class: 'wa-sidebar wa-card' });
+  const sidebar = el('aside', { class: 'wa-sidebar' });
   const main = el('main', { class: 'wa-main' });
 
-  // sidebar content
   sidebar.append(
-    el('div', { class: 'brand', html: `<div style="display:flex;gap:10px;align-items:center;"><div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent));display:grid;place-items:center;color:#fff;font-weight:700">WA</div><div><div style="font-weight:700;color:var(--accent)">Admin Panel</div><div class="muted" style="font-size:12px">Kelola soal & data</div></div></div>` }),
-    el('div', { class: 'wa-card', html: `<div id="authBox"><div id="adminInfo" class="muted">Belum login</div><form id="loginForm" class="stack" style="margin-top:8px"><input id="loginEmail" placeholder="Email admin" type="email"/><input id="loginPass" placeholder="Password" type="password"/><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="submit">Masuk</button></div></form><div style="display:flex;gap:8px;margin-top:8px"><button id="btnLogout" class="btn ghost" style="display:none">Logout</button></div></div>` }),
-    el('div', { class: 'wa-card', style: 'margin-top:12px', html: `<h4 class="muted">Menu</h4><div class="menu" id="leftMenu"><button data-view="dashboard" class="active">Dashboard</button><button data-view="courses">Mata Kuliah</button><button data-view="peserta">Peserta</button><button data-view="skor">Skor</button></div>` })
+    el('div', { class: 'brand', style:'margin-bottom:20px;display:flex;align-items:center;gap:12px', html: `<div class="badge" style="background:#008069;color:white">A</div><div><div style="font-weight:700;font-size:16px">Admin Panel</div><div class="muted">Quiz Manager</div></div>` }),
+    el('div', { id:"authBox", html: `<div id="adminInfo" style="font-weight:600;margin-bottom:8px">Checking...</div><form id="loginForm"><input id="loginEmail" placeholder="Email" type="email"/><input id="loginPass" placeholder="Password" type="password"/><button class="btn" style="width:100%" type="submit">Login</button></form><button id="btnLogout" class="btn ghost" style="width:100%;display:none">Logout</button>` }),
+    el('hr', { style:'border:0;border-top:1px solid #e9edef;margin:16px 0' }),
+    el('div', { class: 'menu', id: 'leftMenu', html: `<button data-view="dashboard" class="active">📊 Dashboard</button><button data-view="courses">📚 Mata Kuliah</button><button data-view="peserta">👥 Peserta</button><button data-view="skor">🏆 Skor</button>` })
   );
 
-  // main content topbar + container
   main.append(
-    el('div', { class:'wa-topbar', html: `<div><h2 id="mainTitle" style="margin:0">Dashboard Admin</h2><div id="mainSubtitle" class="muted">Ringkasan data</div></div><div><button id="btnRefresh" class="btn ghost">Refresh</button> <button id="btnNewCourse" class="btn" style="margin-left:8px">Tambah Course</button></div>` }),
-    el('section', { id:'mainContent', class:'wa-card', html: `<div id="contentInner">Memuat...</div>` })
+    el('div', { class:'wa-topbar wa-card', style:'padding:14px;display:flex;justify-content:space-between;align-items:center', html: `<div><h2 id="mainTitle" style="margin:0;font-size:18px">Dashboard</h2></div><div><button id="btnRefresh" class="btn ghost sm">↻ Refresh</button> <button id="btnNewCourse" class="btn sm">+ Course Baru</button></div>` }),
+    el('section', { id:'mainContent', class:'wa-card', style:'flex:1', html: `<div id="contentInner">Memuat data...</div>` })
   );
 
   root.append(sidebar, main);
   document.body.appendChild(root);
 
-  // attach events
+  // Events
   qsa('.menu button').forEach(b => b.addEventListener('click', (ev) => {
     qsa('.menu button').forEach(x => x.classList.remove('active'));
     ev.currentTarget.classList.add('active');
@@ -195,260 +209,367 @@ function buildShell() {
   qs('#btnNewCourse').addEventListener('click', () => openCourseEditor());
 }
 
-// ----------------------- Views & render -----------------------
+// ----------------------- App State -----------------------
 let APP = { user:null, courses:[], participants:[], scores:[] };
 
 async function navigateToView(view) {
-  qs('#mainTitle').textContent = view === 'dashboard' ? 'Dashboard Admin' : view === 'courses' ? 'Mata Kuliah' : view === 'peserta' ? 'Peserta' : 'Skor';
+  qs('#mainTitle').textContent = view.charAt(0).toUpperCase() + view.slice(1);
   await renderView(view);
 }
 
 async function renderView(view='dashboard') {
   const container = qs('#contentInner');
-  container.innerHTML = 'Memuat...';
+  container.innerHTML = '<div class="muted">Memuat...</div>';
   if (view === 'dashboard') return renderDashboard(container);
   if (view === 'courses') return renderCourses(container);
   if (view === 'peserta') return renderPeserta(container);
   if (view === 'skor') return renderSkor(container);
-  container.innerHTML = 'Tidak ada view';
 }
 
-async function renderDashboard(container) {
+// ----------------------- Render Functions -----------------------
+function renderDashboard(container) {
   const ccount = APP.courses.length;
   const qcount = APP.courses.reduce((t,c)=> t + (Array.isArray(c.questions)?c.questions.length:0),0);
   const pcount = APP.participants.length;
-  const scount = APP.scores.length;
-  container.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap"><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${ccount}</div><div class="muted">Mata Kuliah</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${qcount}</div><div class="muted">Total Soal</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${pcount}</div><div class="muted">Peserta</div></div><div class="wa-card" style="flex:1;min-width:220px;text-align:center;padding:18px"><div style="font-size:28px;font-weight:700">${scount}</div><div class="muted">Skor</div></div></div><div style="margin-top:12px" class="wa-card"><h4 class="muted">Latest Courses</h4><div id="latestCourses" style="margin-top:8px"></div></div>`;
-  const list = qs('#latestCourses');
-  list.innerHTML = '';
-  APP.courses.slice(0,6).forEach(c => {
-    const item = el('div', { class: 'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(c.name||'')[0]||'C'}</div><div style="margin-left:8px"><div style="font-weight:600">${c.name}</div><div class="muted">${(c.questions||[]).length} soal</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${c.id}" data-act="view">Buka</button> <button class="btn" data-id="${c.id}" data-act="edit">Edit</button>` }));
-    list.appendChild(item);
-    item.querySelector('[data-act="view"]').addEventListener('click', ()=> openCourseViewer(c));
-    item.querySelector('[data-act="edit"]').addEventListener('click', ()=> openCourseEditor(c));
-  });
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px">
+        <div style="background:#e7f5f2;padding:16px;border-radius:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#008069">${ccount}</div><div class="muted">Courses</div></div>
+        <div style="background:#e7f5f2;padding:16px;border-radius:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#008069">${qcount}</div><div class="muted">Total Soal</div></div>
+        <div style="background:#e7f5f2;padding:16px;border-radius:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#008069">${pcount}</div><div class="muted">Peserta</div></div>
+    </div>
+    <h4>Course Terbaru</h4>
+    <div id="dashCourses"></div>
+  `;
+  const list = qs('#dashCourses');
+  APP.courses.slice(0,5).forEach(c => list.appendChild(createCourseRow(c)));
 }
 
-async function renderCourses(container) {
-  container.innerHTML = `<h3>Daftar Mata Kuliah</h3><div id="coursesList" style="margin-top:12px"></div>`;
-  const listEl = qs('#coursesList');
-  listEl.innerHTML = '';
-  if (!APP.courses || APP.courses.length === 0) { listEl.innerHTML = '<div class="muted">Belum ada course. Klik "Tambah Course".</div>'; return; }
-  APP.courses.forEach(c => {
-    const it = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(c.name||'')[0]||'C'}</div><div style="margin-left:8px"><div style="font-weight:600">${c.name}</div><div class="muted">${(c.questions||[]).length} soal</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${c.id}" data-act="view">View</button> <button class="btn" data-id="${c.id}" data-act="edit">Edit</button> <button class="btn ghost" data-id="${c.id}" data-act="delete">Delete</button>` }) );
-    listEl.appendChild(it);
-    it.querySelector('[data-act="view"]').addEventListener('click', ()=> openCourseViewer(c));
-    it.querySelector('[data-act="edit"]').addEventListener('click', ()=> openCourseEditor(c));
-    it.querySelector('[data-act="delete"]').addEventListener('click', async ()=> {
-      if (!confirm('Hapus course ini?')) return;
-      await deleteCourse(c.id);
-      await refreshAndRender();
+function renderCourses(container) {
+  container.innerHTML = `<div id="allCourses"></div>`;
+  const list = qs('#allCourses');
+  if(APP.courses.length === 0) { list.innerHTML = '<div class="muted">Belum ada course.</div>'; return; }
+  APP.courses.forEach(c => list.appendChild(createCourseRow(c)));
+}
+
+function createCourseRow(c) {
+  const div = el('div', { class: 'course-item' });
+  const qLen = (c.questions||[]).length;
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px">
+        <div class="badge">${(c.name||'C')[0].toUpperCase()}</div>
+        <div><div style="font-weight:600">${escapeHTML(c.name)}</div><div class="muted">${qLen} soal • ${c.description?escapeHTML(c.description):'-'}</div></div>
+    </div>
+    <div style="display:flex;gap:6px">
+        <button class="btn ghost sm" data-act="view">View</button>
+        <button class="btn sm" data-act="edit">Edit</button>
+        <button class="btn danger sm" data-act="delete">Del</button>
+    </div>
+  `;
+  div.querySelector('[data-act="view"]').onclick = () => openCourseViewer(c);
+  div.querySelector('[data-act="edit"]').onclick = () => openCourseEditor(c);
+  div.querySelector('[data-act="delete"]').onclick = async () => {
+    if(!confirm(`Hapus "${c.name}"?`)) return;
+    await deleteCourse(c.id);
+  };
+  return div;
+}
+
+function renderPeserta(container) {
+    container.innerHTML = `<div class="muted">Fitur manajemen peserta (Hapus/Block) dapat ditambahkan di sini.</div><br/>Total: ${APP.participants.length} User.`;
+}
+function renderSkor(container) {
+    container.innerHTML = `<h4>Riwayat Skor</h4>`;
+    APP.scores.forEach(s => {
+        container.innerHTML += `<div class="course-item"><div style="font-weight:600">${s.score} Point</div><div class="muted">${s.participantId} @ ${s.courseId}</div></div>`;
     });
-  });
 }
 
-async function renderPeserta(container) {
-  container.innerHTML = `<h3>Peserta</h3><div id="pesertaList" style="margin-top:12px"></div>`;
-  const l = qs('#pesertaList'); l.innerHTML = '';
-  if (!APP.participants || APP.participants.length === 0) { l.innerHTML = '<div class="muted">Belum ada peserta.</div>'; return; }
-  APP.participants.forEach(p => {
-    const item = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${(p.name||p.email||'U')[0]}</div><div style="margin-left:8px"><div style="font-weight:600">${p.name||p.email}</div><div class="muted">${p.email||''}</div></div>` }), el('div', { html:`<button class="btn ghost" data-id="${p.id}" data-act="delete">Hapus</button>` }) );
-    l.appendChild(item);
-    item.querySelector('[data-act="delete"]').addEventListener('click', ()=> { alert('Hapus peserta belum diimplementasikan via UI — saya bisa tambahkan jika mau.'); });
-  });
-}
-
-async function renderSkor(container) {
-  container.innerHTML = `<h3>Skor</h3><div id="skorList" style="margin-top:12px"></div>`;
-  const l = qs('#skorList'); l.innerHTML = '';
-  if (!APP.scores || APP.scores.length === 0) { l.innerHTML = '<div class="muted">Belum ada skor.</div>'; return; }
-  APP.scores.forEach(s => {
-    const time = s.createdAt && s.createdAt.seconds ? new Date(s.createdAt.seconds*1000).toLocaleString() : new Date().toLocaleString();
-    const item = el('div', { class:'course-item' }, el('div', { class:'left', html:`<div class="course-badge">${s.score||0}</div><div style="margin-left:8px"><div style="font-weight:600">${s.participantId||'Peserta'}</div><div class="muted">${s.courseId||''}</div></div>` }), el('div', { html: time }) );
-    l.appendChild(item);
-  });
-}
-
-// ----------------------- Modal helpers -----------------------
+// ----------------------- MODAL EDITOR (REVISED) -----------------------
 let modalRoot = null;
-function openModal(html) {
+function openModal(contentEl) {
   if (!modalRoot) { modalRoot = el('div', { id:'wa_modal_root' }); document.body.appendChild(modalRoot); }
-  modalRoot.innerHTML = `<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);z-index:9999;"><div style="width:100%;max-width:900px;padding:14px">${html}</div></div>`;
-  modalRoot.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModal));
+  modalRoot.innerHTML = ''; 
+  const overlay = el('div', { style:'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9990;display:grid;place-items:center;padding:20px;backdrop-filter:blur(2px)' });
+  const box = el('div', { class:'wa-card', style:'width:100%;max-width:700px;max-height:90vh;overflow-y:auto;position:relative' });
+  box.appendChild(contentEl);
+  overlay.appendChild(box);
+  modalRoot.appendChild(overlay);
+  
+  // Close on click outside
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) modalRoot.innerHTML = ''; });
 }
-function closeModal() { if (modalRoot) modalRoot.innerHTML = ''; }
+function closeModal() { if(modalRoot) modalRoot.innerHTML = ''; }
 
-// ----------------------- Course viewer/editor -----------------------
 function openCourseViewer(course) {
-  const html = `<div class="wa-card"><h3>${escapeHTML(course.name)}</h3><div style="margin-top:8px">${(course.questions||[]).map((q,idx)=>`<div style="margin-bottom:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02)"><div style="font-weight:600">${idx+1}. ${escapeHTML(q.question)}</div><div class="muted" style="margin-top:6px">${Object.entries(q.options||{}).map(([k,v])=>k+': '+escapeHTML(v)).join(' | ')}</div>${q.explanation?`<div style="margin-top:6px;color:#6b7280">${escapeHTML(q.explanation)}</div>`:''}</div>`).join('')}</div><div style="margin-top:10px"><button data-close class="btn ghost">Tutup</button></div></div>`;
-  openModal(html);
+  const wrap = el('div');
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="margin:0">${escapeHTML(course.name)}</h3>
+        <button id="v_close" class="btn ghost sm">Tutup</button>
+    </div>
+    <div style="background:#f0f2f5;padding:12px;border-radius:8px;margin-bottom:12px">${escapeHTML(course.description||'No desc')}</div>
+    <div id="v_q_list"></div>
+  `;
+  const list = wrap.querySelector('#v_q_list');
+  (course.questions||[]).forEach((q, i) => {
+    list.innerHTML += `<div class="q-row"><div><b>${i+1}. ${escapeHTML(q.question)}</b><br/><span class="muted">Ans: ${q.correct}</span></div></div>`;
+  });
+  wrap.querySelector('#v_close').onclick = closeModal;
+  openModal(wrap);
 }
 
+// *** KEY REVISION: BETTER EDITOR LOGIC ***
 function openCourseEditor(course=null) {
   const isEdit = !!course;
-  const html = `<div class="wa-card"><h3>${isEdit ? 'Edit Course' : 'Tambah Course'}</h3>
-    <div style="margin-top:10px">
-      <label>Nama</label><input id="ce_name" value="${isEdit?escapeHTML(course.name):''}" />
-      <label>Deskripsi</label><input id="ce_desc" value="${isEdit?escapeHTML(course.description||''):''}" />
-      <hr />
-      <h4>Tambah Soal Baru</h4>
-      <label>Pertanyaan</label><textarea id="q_new_text"></textarea>
-      <div style="display:flex;gap:8px"><input id="q_opt_a" placeholder="Opsi A"/><input id="q_opt_b" placeholder="Opsi B"/></div>
-      <div style="display:flex;gap:8px;margin-top:8px"><input id="q_opt_c" placeholder="Opsi C"/><input id="q_opt_d" placeholder="Opsi D"/></div>
-      <label>Jawaban benar (A/B/C/D)</label><input id="q_new_correct" placeholder="A"/>
-      <label>Penjelasan (opsional)</label><input id="q_new_explain" />
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button data-close class="btn ghost">Batal</button>
-        <button id="ce_save" class="btn">${isEdit ? 'Simpan' : 'Buat'}</button>
-      </div>
-    </div></div>`;
-  openModal(html);
-  qs('#ce_save').addEventListener('click', async () => {
-    const name = qs('#ce_name').value.trim();
-    if (!name) return alert('Nama course wajib diisi.');
-    const desc = qs('#ce_desc').value.trim();
-    const qtext = qs('#q_new_text').value.trim();
-    const options = { A: qs('#q_opt_a').value.trim(), B: qs('#q_opt_b').value.trim(), C: qs('#q_opt_c').value.trim(), D: qs('#q_opt_d').value.trim() };
-    const correct = (qs('#q_new_correct').value.trim().toUpperCase() || 'A');
-    const qExplain = qs('#q_new_explain').value.trim();
-    const newQ = qtext ? { id: makeId('q-'), question: qtext, options: Object.fromEntries(Object.entries(options).filter(([k,v])=>v)), correct, explanation: qExplain } : null;
+  // Deep copy questions to avoid mutating state directly before save
+  let tempQuestions = isEdit && course.questions ? JSON.parse(JSON.stringify(course.questions)) : [];
 
-    try {
-      if (!isEdit) {
-        const newCourse = { id: makeId('local-'), name, description: desc, questions: newQ ? [newQ] : [] };
-        const res = await saveCourseRemote(newCourse);
-        if (res.success) toast('Course dibuat (remote).','success');
-        else {
-          // fallback local
+  const wrap = el('div');
+  wrap.innerHTML = `
+    <h3 style="margin-top:0">${isEdit ? 'Edit Course' : 'Course Baru'}</h3>
+    <label class="muted">Nama Mata Kuliah</label>
+    <input id="ce_name" value="${isEdit?escapeHTML(course.name):''}" />
+    <label class="muted">Deskripsi</label>
+    <input id="ce_desc" value="${isEdit?escapeHTML(course.description||''):''}" />
+    
+    <hr style="border:0;border-top:1px solid #ddd;margin:16px 0"/>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h4 style="margin:0">Daftar Soal (<span id="q_count">0</span>)</h4>
+        <button id="btn_clear_form" class="btn ghost sm" style="display:none">Batal Edit Soal</button>
+    </div>
+
+    <div style="background:#f7f9fa;padding:12px;border-radius:8px;margin-top:10px;border:1px solid #e9edef">
+        <label class="muted">Pertanyaan</label>
+        <textarea id="q_text" rows="2" placeholder="Tulis pertanyaan..."></textarea>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <input id="q_a" placeholder="Opsi A" /> <input id="q_b" placeholder="Opsi B" />
+            <input id="q_c" placeholder="Opsi C" /> <input id="q_d" placeholder="Opsi D" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:4px">
+            <div><label class="muted">Jawaban Benar</label><select id="q_correct"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+            <div><label class="muted">Penjelasan (Opsional)</label><input id="q_explain" placeholder="Kenapa jawabannya itu?" /></div>
+        </div>
+        <div style="text-align:right;margin-top:8px">
+            <button id="btn_add_q" class="btn sm">Tambahkan Soal</button>
+        </div>
+    </div>
+
+    <div id="ce_q_list" style="margin-top:16px;max-height:300px;overflow-y:auto"></div>
+
+    <div style="margin-top:20px;text-align:right;display:flex;gap:10px;justify-content:flex-end">
+        <button id="ce_cancel" class="btn ghost">Batal</button>
+        <button id="ce_save" class="btn">Simpan Course</button>
+    </div>
+  `;
+
+  // Elements Refs
+  const qListEl = wrap.querySelector('#ce_q_list');
+  const countEl = wrap.querySelector('#q_count');
+  const inputs = {
+      text: wrap.querySelector('#q_text'),
+      a: wrap.querySelector('#q_a'), b: wrap.querySelector('#q_b'),
+      c: wrap.querySelector('#q_c'), d: wrap.querySelector('#q_d'),
+      correct: wrap.querySelector('#q_correct'), explain: wrap.querySelector('#q_explain')
+  };
+  
+  // Render List Logic
+  const renderList = () => {
+      qListEl.innerHTML = '';
+      countEl.textContent = tempQuestions.length;
+      tempQuestions.forEach((q, idx) => {
+          const row = el('div', { class:'q-row' });
+          row.innerHTML = `
+            <div style="flex:1">
+                <div style="font-weight:600;font-size:14px">${idx+1}. ${escapeHTML(q.question)}</div>
+                <div class="muted" style="font-size:12px">Key: ${q.correct} | Opts: ${Object.values(q.options).join(', ')}</div>
+            </div>
+            <div style="display:flex;gap:4px;margin-left:8px">
+                <button class="btn ghost sm" data-act="edit_q">Edit</button>
+                <button class="btn danger sm" style="padding:4px 8px" data-act="del_q">✕</button>
+            </div>
+          `;
+          // Edit Question Click
+          row.querySelector('[data-act="edit_q"]').onclick = () => {
+             // Populate form
+             inputs.text.value = q.question;
+             inputs.a.value = q.options.A; inputs.b.value = q.options.B;
+             inputs.c.value = q.options.C; inputs.d.value = q.options.D;
+             inputs.correct.value = q.correct;
+             inputs.explain.value = q.explanation || '';
+             // Remove from temp list so user can re-add update
+             tempQuestions.splice(idx, 1);
+             renderList();
+             wrap.querySelector('#btn_add_q').textContent = "Update Soal";
+             wrap.querySelector('#btn_clear_form').style.display = 'block';
+             inputs.text.focus();
+          };
+          // Delete Question Click
+          row.querySelector('[data-act="del_q"]').onclick = () => {
+              if(confirm('Hapus soal ini?')) {
+                  tempQuestions.splice(idx, 1);
+                  renderList();
+              }
+          };
+          qListEl.appendChild(row);
+      });
+  };
+
+  // Add Question Logic
+  wrap.querySelector('#btn_add_q').onclick = () => {
+      const qVal = inputs.text.value.trim();
+      if(!qVal) return alert('Pertanyaan wajib diisi');
+      
+      const newQ = {
+          id: makeId('q-'),
+          question: qVal,
+          options: { 
+             A: inputs.a.value.trim(), B: inputs.b.value.trim(), 
+             C: inputs.c.value.trim(), D: inputs.d.value.trim() 
+          },
+          correct: inputs.correct.value,
+          explanation: inputs.explain.value.trim()
+      };
+      
+      // Basic validation: ensure at least 2 options
+      if(!newQ.options.A || !newQ.options.B) return alert('Minimal Opsi A dan B harus diisi');
+
+      tempQuestions.push(newQ);
+      renderList();
+      
+      // Reset form
+      Object.values(inputs).forEach(i => i.value = (i.tagName==='SELECT'?'A':''));
+      wrap.querySelector('#btn_add_q').textContent = "Tambahkan Soal";
+      wrap.querySelector('#btn_clear_form').style.display = 'none';
+  };
+
+  wrap.querySelector('#btn_clear_form').onclick = () => {
+      Object.values(inputs).forEach(i => i.value = (i.tagName==='SELECT'?'A':''));
+      wrap.querySelector('#btn_add_q').textContent = "Tambahkan Soal";
+      wrap.querySelector('#btn_clear_form').style.display = 'none';
+  };
+
+  // Save Whole Course Logic
+  wrap.querySelector('#ce_save').onclick = async () => {
+      const name = wrap.querySelector('#ce_name').value.trim();
+      if(!name) return alert('Nama course harus diisi');
+      
+      wrap.querySelector('#ce_save').textContent = 'Menyimpan...';
+      wrap.querySelector('#ce_save').disabled = true;
+
+      const payload = {
+          id: isEdit ? course.id : undefined,
+          name: name,
+          description: wrap.querySelector('#ce_desc').value.trim(),
+          questions: tempQuestions
+      };
+
+      // Try Remote Save
+      let res = await saveCourseRemote(payload);
+      
+      if(!res.success) {
+          // Fallback Local
           const local = readLocalData();
-          local.courses.push(newCourse);
-          writeLocalData(local);
-          toast('Course dibuat lokal (firestore error).','error');
-        }
-      } else {
-        // if course id looks remote update remote
-        if (!String(course.id).startsWith('local-')) {
-          if (newQ) { // push question
-            // naive approach: fetch doc, update questions array on remote
-            const snap = await getDoc(doc(db, "courses", course.id));
-            if (snap.exists()) {
-              const data = snap.data();
-              const qs = Array.isArray(data.questions)?data.questions:[];
-              qs.push(newQ);
-              await updateCourseRemote(course.id, { questions: qs });
-            }
+          if(isEdit && String(course.id).startsWith('local-')) {
+             const idx = local.courses.findIndex(x=>x.id === course.id);
+             if(idx >= 0) local.courses[idx] = { ...local.courses[idx], ...payload };
+          } else if (!isEdit) {
+             payload.id = makeId('local-');
+             local.courses.push(payload);
           }
-          await updateCourseRemote(course.id, { name, description: desc });
-          toast('Perubahan disimpan (remote).','success');
-        } else {
-          const local = readLocalData();
-          const c = local.courses.find(x=>x.id===course.id);
-          if (c) { c.name = name; c.description = desc; if (newQ) c.questions = c.questions||[], c.questions.push(newQ); writeLocalData(local); }
-          toast('Perubahan disimpan (lokal).','success');
-        }
+          writeLocalData(local);
+          toast('Disimpan ke Local (Remote Error)', 'error');
+      } else {
+          toast('Berhasil disimpan!', 'success');
       }
-    } catch (err) {
-      console.error(err); toast('Error saat menyimpan','error');
-    } finally {
-      closeModal(); await refreshAndRender();
-    }
-  });
+      
+      closeModal();
+      await refreshAndRender();
+  };
+
+  wrap.querySelector('#ce_cancel').onclick = closeModal;
+
+  renderList();
+  openModal(wrap);
 }
 
-// ----------------------- Data loading & refresh -----------------------
+// ----------------------- Delete Handler -----------------------
+async function deleteCourse(id) {
+    if (String(id).startsWith('local-')) {
+        const local = readLocalData();
+        local.courses = local.courses.filter(c => c.id !== id);
+        writeLocalData(local);
+        toast('Course lokal dihapus');
+        await refreshAndRender();
+        return;
+    }
+    const res = await deleteCourseRemote(id);
+    if(res.success) {
+        toast('Course dihapus');
+        await refreshAndRender();
+    } else {
+        toast('Gagal hapus remote', 'error');
+    }
+}
+
+// ----------------------- Data Loading -----------------------
 async function refreshAndRender() {
-  // attempt remote first; if remote fails, fallback to local
   const remote = await fetchCoursesRemote();
   if (remote && Array.isArray(remote)) {
-    APP.courses = remote.map(r => ({ id: r.id, name: r.name, description: r.description || '', questions: Array.isArray(r.questions)?r.questions:r.questions || [] }));
+    APP.courses = remote;
   } else {
     const local = readLocalData();
     APP.courses = local.courses || [];
   }
+  
+  // Fetch others (Participants/Scores) - Naive implementation
+  try {
+      const pSnap = await getDocs(collection(db, 'peserta')); // Adjust collection name
+      APP.participants = []; pSnap.forEach(d=> APP.participants.push(d.data()));
+  } catch(e) {}
+  
+  try {
+      const sSnap = await getDocs(collection(db, 'scores'));
+      APP.scores = []; sSnap.forEach(d=> APP.scores.push(d.data()));
+  } catch(e) {}
 
-  // participants and scores naive fetch (no fallback)
-  try { const ps = await getDocs(collection(db,'peserta')); APP.participants = ps.docs.map(d=>({ id:d.id, ...d.data() })); } catch(e){ APP.participants = []; }
-  try { const ss = await getDocs(collection(db,'scores')); APP.scores = ss.docs.map(d=>({ id:d.id, ...d.data() })); } catch(e){ APP.scores = []; }
-
-  // render current view
   const active = qs('.menu button.active')?.dataset.view || 'dashboard';
   await renderView(active);
-  qs('#mainSubtitle').textContent = 'Ringkasan data • terakhir disegarkan: ' + new Date().toLocaleTimeString();
 }
 
-// ----------------------- Delete course wrapper -----------------------
-async function deleteCourse(id) {
-  if (String(id).startsWith('local-')) {
-    const local = readLocalData();
-    local.courses = local.courses.filter(c => c.id !== id);
-    writeLocalData(local);
-    return;
-  }
-  const res = await deleteCourseRemote(id);
-  if (res.success) toast('Course dihapus (remote)','success');
-  else {
-    const local = readLocalData();
-    local.courses = local.courses.filter(c => c.id !== id);
-    writeLocalData(local);
-    toast('Course dihapus (lokal)','error');
-  }
-}
-
-// ----------------------- Auth handlers -----------------------
+// ----------------------- Auth Logic -----------------------
 async function handleLogin(email, password) {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    const user = cred.user;
-    const ok = await isAdminUid(user.uid);
-    if (!ok) {
-      toast('Akun tidak memiliki akses admin','error');
-      await signOut(auth);
-      return;
-    }
-    APP.user = user;
-    qs('#adminInfo').textContent = user.email || 'Admin';
-    qs('#btnLogout').style.display = '';
-    qs('#loginForm').style.display = 'none';
-    toast('Login berhasil','success');
-    await refreshAndRender();
+    const ok = await isAdminUid(cred.user.uid);
+    if (!ok) { await signOut(auth); toast('Bukan akun Admin!', 'error'); return; }
+    toast('Login Berhasil', 'success');
   } catch (err) {
-    console.error(err);
-    toast('Login gagal: cek email/password atau koneksi','error');
+    console.error(err); toast('Gagal Login', 'error');
   }
 }
-async function handleLogout() {
-  try { await signOut(auth); } catch (e){ console.warn(e); }
-  APP.user = null;
-  qs('#adminInfo').textContent = 'Belum login';
-  qs('#btnLogout').style.display = 'none';
-  qs('#loginForm').style.display = '';
-  toast('Logout berhasil','info');
-  await refreshAndRender();
-}
+async function handleLogout() { await signOut(auth); location.reload(); }
 
-// ----------------------- Auth listener (auto sign-out if not admin) -----------------------
 onAuthStateChanged(auth, async (user) => {
-  if (!user) { APP.user = null; qs('#adminInfo').textContent = 'Belum login'; qs('#btnLogout').style.display = 'none'; qs('#loginForm').style.display = ''; return; }
-  const ok = await isAdminUid(user.uid);
-  if (!ok) { await signOut(auth); toast('Akun tidak punya hak admin','error'); return; }
-  APP.user = user;
-  qs('#adminInfo').textContent = user.email || 'Admin';
-  qs('#btnLogout').style.display = '';
-  qs('#loginForm').style.display = 'none';
-  await refreshAndRender();
+  if (user) {
+    const ok = await isAdminUid(user.uid);
+    if(ok) {
+        APP.user = user;
+        qs('#authBox').innerHTML = `<div style="margin-bottom:8px">Hi, <b>${user.email}</b></div>`;
+        qs('#btnLogout').style.display = 'block';
+        refreshAndRender();
+    } else {
+        await signOut(auth);
+    }
+  } else {
+    APP.user = null;
+    qs('#authBox').innerHTML = `<div id="adminInfo" style="font-weight:600;margin-bottom:8px">Admin Login</div><form id="loginForm"><input id="loginEmail" placeholder="Email" type="email"/><input id="loginPass" placeholder="Password" type="password"/><button class="btn" style="width:100%" type="submit">Login</button></form>`;
+    qs('#loginForm').addEventListener('submit', async (ev) => { ev.preventDefault(); await handleLogin(qs('#loginEmail').value.trim(), qs('#loginPass').value); });
+  }
 });
 
-// ----------------------- Init -----------------------
-document.addEventListener('DOMContentLoaded', async () => {
-  buildShell();
-  const local = readLocalData();
-  APP.courses = local.courses || [];
-  APP.participants = [];
-  APP.scores = [];
-  await refreshAndRender();
-  // dark-mode toggle via saved pref (simple)
-  if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark-mode');
+// ----------------------- Boot -----------------------
+document.addEventListener('DOMContentLoaded', () => {
+    buildShell();
+    refreshAndRender();
 });
-
-// ----------------------- Expose for debug -----------------------
-window.ADMIN_PANEL = { refresh: refreshAndRender, APP, auth, db };
