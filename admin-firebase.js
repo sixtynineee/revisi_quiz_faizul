@@ -1,12 +1,24 @@
-// admin-firebase.js — Version WITHOUT ADMIN ROLE CHECK
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+// admin-firebase.js (FINAL VERSION)
+// ------------------------------------------------------------
+// Firebase
+// ------------------------------------------------------------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, getDoc,
-  query, orderBy, where
-} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+
 import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+  getFirestore,
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
 /* ---------- CONFIG ---------- */
 const firebaseConfig = {
@@ -17,366 +29,258 @@ const firebaseConfig = {
   messagingSenderId: "177544522930",
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
-
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-/* ---------- DOM helpers ---------- */
+// ------------------------------------------------------------
+// UTIL
+// ------------------------------------------------------------
 const $ = id => document.getElementById(id);
-const safe = v => (v === undefined || v === null) ? '' : String(v);
 
-/* ---------- DOM refs ---------- */
-const coursesView = $('coursesView');
-const coursesAdminList = $('coursesAdminList');
-const addCourseBtn = $('addCourseBtn');
-
-const materiPanel = $('materiPanel');
-const materiList = $('materiList');
-const materiCourseTitle = $('materiCourseTitle');
-const addMateriBtn = $('addMateriBtn');
-
-const soalPanel = $('soalPanel');
-const soalList = $('soalList');
-const soalMateriTitle = $('soalMateriTitle');
-const addSoalBtn = $('addSoalBtn');
-
-const loginForm = $('loginForm');
-const loginEmail = $('loginEmail');
-const loginPass = $('loginPass');
-
-const logoutWrap = $('logoutWrap');
-const signedEmail = $('signedEmail');
-const btnLogout = $('btnLogout');
-
-const themeBtn = $('themeBtnAdmin');
-const themeCheckbox = $('themeToggleAdmin');
-
-/* ---------- LOCAL STATE ---------- */
-let selectedCourseId = null;
-let selectedMateriId = null;
-let selectedCourseName = '';
-
-/* ---------- UI ---------- */
-function toast(msg, type='info') {
-  const t = document.createElement('div');
-  t.textContent = msg;
-  t.style.position = 'fixed';
-  t.style.right = '20px';
-  t.style.top = '20px';
-  t.style.padding = '8px 12px';
-  t.style.color = '#fff';
-  t.style.borderRadius = '8px';
-  t.style.zIndex = 99999;
-  t.style.background = type === 'error' ? '#ef4444' :
-                       type === 'success' ? '#16a34a' : '#0b74de';
-  document.body.appendChild(t);
-  setTimeout(()=> t.style.opacity = '0', 2000);
-  setTimeout(()=> t.remove(), 2400);
-}
-
-function showAdminUI(user) {
-  loginForm.style.display = 'none';
-  coursesView.style.display = 'flex';
-  logoutWrap.style.display = 'block';
-  signedEmail.textContent = user.email;
-}
-
-function showLoginUIOnly() {
-  loginForm.style.display = 'block';
-  coursesView.style.display = 'none';
-  materiPanel.style.display = 'none';
-  soalPanel.style.display = 'none';
-  logoutWrap.style.display = 'none';
-}
-
-/* ---------- THEME ---------- */
-function applyThemeFromStorage() {
-  const saved = localStorage.getItem('theme') || 'light';
-  const isDark = saved === 'dark';
-  document.body.classList.toggle('dark', isDark);
-  themeCheckbox.checked = isDark;
-  themeBtn.textContent = isDark ? '☀' : '☾';
-}
-function wireThemeControls() {
-  applyThemeFromStorage();
-  themeCheckbox.addEventListener('change', () => {
-    const isDark = themeCheckbox.checked;
-    document.body.classList.toggle('dark', isDark);
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    themeBtn.textContent = isDark ? '☀' : '☾';
+// Switch admin page
+function showPage(pg){
+  ["loginPage","adminPage"].forEach(x=>{
+    $(x).style.display = "none";
   });
-  themeBtn.addEventListener('click', () => {
-    const isDark = document.body.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    themeCheckbox.checked = isDark;
-    themeBtn.textContent = isDark ? '☀' : '☾';
-  });
+  $(pg).style.display = "block";
 }
 
-/* ---------- AUTH (NO ROLE CHECK) ---------- */
-if (loginForm) {
-  loginForm.addEventListener('submit', async (ev)=> {
-    ev.preventDefault();
-    const email = loginEmail.value.trim();
-    const pass = loginPass.value;
-    if (!email || !pass) return toast('Email & password wajib', 'error');
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-    } catch(err) {
-      toast('Gagal login: ' + err.code, 'error');
-    }
-  });
-}
+// Escape HTML
+const esc = s => String(s||"").replace(/[&<>"]/g,m=>({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"
+}[m]));
 
-btnLogout.addEventListener('click', async () => {
-  await signOut(auth);
-  toast('Logout berhasil', 'success');
-  showLoginUIOnly();
-});
+// ------------------------------------------------------------
+// LOGIN ADMIN
+// ------------------------------------------------------------
+$("adminLoginBtn").onclick = async () => {
+  const email = $("adminEmail").value;
+  const pass  = $("adminPass").value;
 
-onAuthStateChanged(auth, user => {
-  if (user) {
-    showAdminUI(user);
-    loadCourses();
-  } else {
-    showLoginUIOnly();
-  }
-});
-
-/* ---------- LOAD COURSES (mata_kuliah) ---------- */
-async function loadCourses() {
-  coursesAdminList.innerHTML = `<div class="muted">Memuat...</div>`;
   try {
-    const q = query(collection(db, 'mata_kuliah'), orderBy('createdAt','desc'));
-    const snap = await getDocs(q);
-
-    if (snap.empty) {
-      coursesAdminList.innerHTML = `<div class="muted">Belum ada mata kuliah.</div>`;
-      return;
-    }
-
-    coursesAdminList.innerHTML = '';
-    snap.forEach(docSnap => {
-      const d = docSnap.data();
-      const id = docSnap.id;
-
-      const item = document.createElement('div');
-      item.className = 'admin-item';
-      item.innerHTML = `
-        <div>
-          <div style="font-weight:600">${safe(d.nama || d.name)}</div>
-          <div class="muted" style="font-size:12px">${safe(d.deskripsi || '')}</div>
-        </div>
-        <div class="admin-actions">
-          <button class="btn sm" data-open="${id}">Materi</button>
-          <button class="btn ghost sm" data-edit="${id}">✎</button>
-          <button class="btn ghost sm" data-del="${id}">🗑</button>
-        </div>
-      `;
-
-      item.querySelector('[data-open]')
-        .addEventListener('click', () => openMateri(id, d.nama));
-
-      item.querySelector('[data-edit]')
-        .addEventListener('click', async () => {
-          const newName = prompt('Edit nama:', d.nama);
-          if (!newName) return;
-          await updateDoc(doc(db, 'mata_kuliah', id), { nama: newName });
-          toast('Updated', 'success');
-          loadCourses();
-        });
-
-      item.querySelector('[data-del]')
-        .addEventListener('click', async () => {
-          if (!confirm('Hapus mata kuliah ini?')) return;
-
-          // hapus materi + soal
-          const ms = await getDocs(collection(db, 'mata_kuliah', id, 'materi'));
-          for (const mdoc of ms.docs) {
-            const soalQ = query(collection(db, 'soal'), where('materiId','==', mdoc.id));
-            const ss = await getDocs(soalQ);
-            for (const s of ss.docs) {
-              await deleteDoc(doc(db, 'soal', s.id));
-            }
-            await deleteDoc(doc(db, 'mata_kuliah', id, 'materi', mdoc.id));
-          }
-
-          await deleteDoc(doc(db, 'mata_kuliah', id));
-          toast('Dihapus', 'success');
-          loadCourses();
-        });
-
-      coursesAdminList.appendChild(item);
-    });
-  } catch(e) {
-    console.error(e);
-    coursesAdminList.innerHTML = `<div class="muted">Gagal memuat.</div>`;
+    await signInWithEmailAndPassword(auth,email,pass);
+  } catch(e){
+    alert("Login gagal: " + e.message);
   }
-}
+};
 
-/* ---------- MATERI ---------- */
-async function openMateri(courseId, courseName) {
-  selectedCourseId = courseId;
-  selectedCourseName = courseName;
-  materiCourseTitle.textContent = `Materi — ${courseName}`;
-  materiPanel.style.display = 'block';
-  soalPanel.style.display = 'none';
-
-  materiList.innerHTML = `<div class="muted">Memuat...</div>`;
-  const q = query(collection(db, 'mata_kuliah', courseId, 'materi'), orderBy('createdAt','desc'));
-  const snap = await getDocs(q);
-
-  if (snap.empty) {
-    materiList.innerHTML = `<div class="muted">Belum ada materi.</div>`;
-    return;
+// ------------------------------------------------------------
+// AUTH STATE CHECK
+// ------------------------------------------------------------
+onAuthStateChanged(auth, user => {
+  if(user){
+    loadCourses();
+    showPage("adminPage");
+  } else {
+    showPage("loginPage");
   }
+});
 
-  materiList.innerHTML = '';
-  snap.forEach(docSnap => {
-    const d = docSnap.data();
-    const mid = docSnap.id;
+// ------------------------------------------------------------
+// LOGOUT
+// ------------------------------------------------------------
+$("logoutBtn").onclick = ()=> signOut(auth);
 
-    const node = document.createElement('div');
-    node.className = 'admin-item';
-    node.innerHTML = `
+// ------------------------------------------------------------
+// FIRESTORE: LOAD COURSES
+// ------------------------------------------------------------
+async function loadCourses(){
+  const root = $("adminCourses");
+  root.innerHTML = "<div class='muted'>Loading...</div>";
+
+  const snap = await getDocs(collection(db,"courses"));
+  const list = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+  root.innerHTML = "";
+
+  list.forEach(c=>{
+    const el = document.createElement("div");
+    el.className = "admin-course-item";
+
+    const materiCount = Array.isArray(c.materi) ? c.materi.length : 0;
+
+    el.innerHTML = `
       <div>
-        <div style="font-weight:600">${safe(d.judul)}</div>
-        <div class="muted" style="font-size:12px">${safe(d.isi || '')}</div>
+        <b>${esc(c.name)}</b><br>
+        <span class="muted">${materiCount} materi</span>
       </div>
-      <div class="admin-actions">
-        <button class="btn sm" data-open="${mid}">Soal</button>
-        <button class="btn ghost sm" data-edit="${mid}">✎</button>
-        <button class="btn ghost sm" data-del="${mid}">🗑</button>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn sm" data-edit="${c.id}">Edit</button>
+        <button class="btn danger sm" data-del="${c.id}">Hapus</button>
       </div>
     `;
+    root.appendChild(el);
+  });
 
-    node.querySelector('[data-open]')
-      .addEventListener('click', () => openSoal(mid, d.judul));
+  // Edit course
+  document.querySelectorAll("[data-edit]").forEach(b=>{
+    b.onclick = ()=> editCourse(b.dataset.edit);
+  });
 
-    node.querySelector('[data-edit]')
-      .addEventListener('click', async () => {
-        const newTitle = prompt('Edit judul:', d.judul);
-        if (!newTitle) return;
-        await updateDoc(doc(db, 'mata_kuliah', courseId, 'materi', mid), { judul: newTitle });
-        toast('Updated', 'success');
-        openMateri(courseId, courseName);
-      });
-
-    node.querySelector('[data-del]')
-      .addEventListener('click', async () => {
-        if (!confirm('Hapus materi ini?')) return;
-
-        const soalQ = query(collection(db, 'soal'), where('materiId','==', mid));
-        const ss = await getDocs(soalQ);
-        for (const s of ss.docs) {
-          await deleteDoc(doc(db, 'soal', s.id));
-        }
-
-        await deleteDoc(doc(db, 'mata_kuliah', courseId, 'materi', mid));
-        toast('Materi dihapus', 'success');
-        openMateri(courseId, courseName);
-      });
-
-    materiList.appendChild(node);
+  // Delete course
+  document.querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick = ()=> deleteCourse(b.dataset.del);
   });
 }
 
-/* ---------- SOAL ---------- */
-async function openSoal(materiId, materiTitle) {
-  selectedMateriId = materiId;
-  soalMateriTitle.textContent = `Soal — ${materiTitle}`;
-  soalPanel.style.display = 'block';
+// ------------------------------------------------------------
+// ADD COURSE
+// ------------------------------------------------------------
+$("addCourseBtn").onclick = async ()=>{
+  const name = prompt("Nama mata kuliah ?");
+  if(!name) return;
 
-  soalList.innerHTML = `<div class="muted">Memuat...</div>`;
-
-  const q = query(collection(db, 'soal'), where('materiId','==', materiId), orderBy('createdAt','desc'));
-  const snap = await getDocs(q);
-
-  if (snap.empty) {
-    soalList.innerHTML = `<div class="muted">Belum ada soal.</div>`;
-    return;
-  }
-
-  soalList.innerHTML = '';
-  snap.forEach(docSnap => {
-    const d = docSnap.data();
-    const sid = docSnap.id;
-
-    const node = document.createElement('div');
-    node.className = 'admin-item';
-    node.innerHTML = `
-      <div>
-        <div style="font-weight:600">${safe(d.question)}</div>
-        <div class="muted" style="font-size:12px">Kunci: ${safe(d.correct)}</div>
-      </div>
-      <div class="admin-actions">
-        <button class="btn ghost sm" data-edit="${sid}">✎</button>
-        <button class="btn ghost sm" data-del="${sid}">🗑</button>
-      </div>
-    `;
-
-    node.querySelector('[data-edit]')
-      .addEventListener('click', async () => {
-        const qBaru = prompt('Edit soal:', d.question);
-        if (!qBaru) return;
-        await updateDoc(doc(db, 'soal', sid), { question: qBaru });
-        toast('Updated', 'success');
-        openSoal(materiId, materiTitle);
-      });
-
-    node.querySelector('[data-del]')
-      .addEventListener('click', async () => {
-        if (!confirm('Hapus soal?')) return;
-        await deleteDoc(doc(db, 'soal', sid));
-        toast('Dihapus', 'success');
-        openSoal(materiId, materiTitle);
-      });
-
-    soalList.appendChild(node);
+  await addDoc(collection(db,"courses"),{
+    name:name,
+    materi:[]
   });
-}
 
-/* ---------- ADD BUTTONS ---------- */
-addCourseBtn?.addEventListener('click', async () => {
-  const nama = prompt('Nama mata kuliah:');
-  if (!nama) return;
-  await addDoc(collection(db, 'mata_kuliah'), {
-    nama,
-    createdAt: Date.now()
-  });
-  toast('Mata kuliah ditambah', 'success');
   loadCourses();
-});
+};
 
-addMateriBtn?.addEventListener('click', async () => {
-  if (!selectedCourseId) return toast('Pilih mata kuliah dulu', 'error');
-  const judul = prompt('Judul materi:');
-  if (!judul) return;
-  await addDoc(collection(db, 'mata_kuliah', selectedCourseId, 'materi'), {
-    judul,
-    createdAt: Date.now()
+// ------------------------------------------------------------
+// DELETE COURSE
+// ------------------------------------------------------------
+async function deleteCourse(id){
+  if(!confirm("Hapus mata kuliah ini?")) return;
+  await deleteDoc(doc(db,"courses",id));
+  loadCourses();
+}
+
+// ------------------------------------------------------------
+// EDIT COURSE + MATERI + SOAL
+// ------------------------------------------------------------
+let EDIT_ID = null;
+
+async function editCourse(id){
+  EDIT_ID = id;
+  const snap = await getDocs(collection(db,"courses"));
+  const data = snap.docs.map(d=>({id:d.id,...d.data()})).find(x=>x.id===id);
+
+  $("editTitle").textContent = "Edit — " + data.name;
+
+  renderMateriEditor(data);
+
+  $("editModal").style.display = "block";
+}
+
+$("closeModal").onclick = ()=> $("editModal").style.display="none";
+
+// ------------------------------------------------------------
+// RENDER MATERI EDITOR
+// ------------------------------------------------------------
+function renderMateriEditor(course){
+  const box = $("materiEditor");
+  box.innerHTML = "";
+
+  course.materi.forEach((m,idx)=>{
+    const item = document.createElement("div");
+    item.className = "materi-item";
+    item.innerHTML = `
+      <div><b>${esc(m.title)}</b><br><span class="muted">${esc(m.description)}</span></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm" data-editm="${idx}">Materi</button>
+        <button class="btn sm" data-soal="${idx}">Soal</button>
+        <button class="btn danger sm" data-delm="${idx}">Hapus</button>
+      </div>
+    `;
+    box.appendChild(item);
   });
-  toast('Materi ditambah', 'success');
-  openMateri(selectedCourseId, selectedCourseName);
-});
 
-addSoalBtn?.addEventListener('click', async () => {
-  if (!selectedMateriId) return toast('Pilih materi dulu', 'error');
-  const t = prompt('Isi soal:');
-  if (!t) return;
-  const k = prompt('Kunci jawaban:');
-  if (!k) return;
+  // add materi
+  $("addMateriBtn").onclick = ()=> addMateri(course);
 
-  await addDoc(collection(db, 'soal'), {
-    materiId: selectedMateriId,
-    question: t,
-    correct: k,
-    createdAt: Date.now()
+  // events
+  box.querySelectorAll("[data-editm]").forEach(b=>{
+    b.onclick = ()=> editMateri(course, parseInt(b.dataset.editm));
   });
-  toast('Soal ditambah', 'success');
-  openSoal(selectedMateriId, soalMateriTitle.textContent.replace('Soal — ', ''));
-});
 
-/* ---------- INIT ---------- */
-wireThemeControls();
+  box.querySelectorAll("[data-soal]").forEach(b=>{
+    b.onclick = ()=> editSoal(course, parseInt(b.dataset.soal));
+  });
+
+  box.querySelectorAll("[data-delm]").forEach(b=>{
+    b.onclick = ()=> deleteMateri(course, parseInt(b.dataset.delm));
+  });
+}
+
+// ------------------------------------------------------------
+// ADD MATERI
+// ------------------------------------------------------------
+async function addMateri(course){
+  const title = prompt("Judul materi?");
+  if(!title) return;
+
+  course.materi.push({
+    id: "m-" + Math.random().toString(36).slice(2,8),
+    title,
+    description:"",
+    questions:[]
+  });
+
+  await updateDoc(doc(db,"courses",course.id),{
+    materi:course.materi
+  });
+
+  editCourse(course.id);
+}
+
+// ------------------------------------------------------------
+// EDIT MATERI (TITLE / DESCRIPTION)
+// ------------------------------------------------------------
+function editMateri(course,index){
+  const m = course.materi[index];
+
+  const title = prompt("Judul baru:", m.title) || m.title;
+  const desc  = prompt("Deskripsi:", m.description) || m.description;
+
+  m.title = title;
+  m.description = desc;
+
+  updateDoc(doc(db,"courses",course.id),{
+    materi: course.materi
+  }).then(()=> editCourse(course.id));
+}
+
+// ------------------------------------------------------------
+// DELETE MATERI
+// ------------------------------------------------------------
+async function deleteMateri(course,index){
+  if(!confirm("Hapus materi ini?")) return;
+  course.materi.splice(index,1);
+
+  await updateDoc(doc(db,"courses",course.id),{
+    materi: course.materi
+  });
+
+  editCourse(course.id);
+}
+
+// ------------------------------------------------------------
+// EDIT SOAL
+// ------------------------------------------------------------
+function editSoal(course, idx){
+  const m = course.materi[idx];
+  const out = [];
+
+  m.questions.forEach((q,i)=>{
+    out.push(
+      `${i+1}. ${q.question}\nA. ${q.options.A}\nB. ${q.options.B}\nC. ${q.options.C}\nD. ${q.options.D}\nCorrect: ${q.correct}`
+    );
+  });
+
+  const newText = prompt(
+    "Edit semua soal. Format:\nPertanyaan?\nA: ...\nB: ...\nC: ...\nD: ...\nANSWER: A/B/C/D",
+    out.join("\n\n")
+  );
+
+  if(!newText) return;
+
+  // tidak parsing ribet — user bebas format
+  // hanya disimpan sebagai raw satu block
+  alert("Untuk versi ini, soal harus diinput lewat UI 'Add Soal' khusus (belum dibuat).");
+}
+
+// ------------------------------------------------------------
