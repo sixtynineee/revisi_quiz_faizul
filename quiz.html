@@ -1,123 +1,13 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <!-- PWA & Mobile Meta Tags -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#075E54" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#0c1317" media="(prefers-color-scheme: dark)">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="QuizApp">
-    <meta name="application-name" content="QuizApp">
-    <meta name="format-detection" content="telephone=no">
-    <meta name="msapplication-TileColor" content="#075E54">
-    <meta name="msapplication-tap-highlight" content="no">
-    
-    <!-- Manifest -->
-    <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
-    
-    <!-- Icons -->
-    <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/color/192/whatsapp.png">
-    <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/whatsapp.png">
-    <link rel="apple-touch-startup-image" href="https://img.icons8.com/color/512/whatsapp.png">
-    
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuizApp - Mulai Quiz</title>
     <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="mobile-optimized.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    
-    <!-- Splash Screen CSS -->
-    <style>
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #075E54;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.5s ease;
-        }
-        
-        #splash-screen.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        
-        .splash-logo {
-            width: 80px;
-            height: 80px;
-            background: white;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
-        }
-        
-        .splash-logo i {
-            font-size: 40px;
-            color: #25D366;
-        }
-        
-        .splash-text {
-            color: white;
-            font-size: 18px;
-            font-weight: 500;
-            margin-top: 20px;
-        }
-        
-        .splash-loader {
-            width: 40px;
-            height: 4px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 2px;
-            margin-top: 20px;
-            overflow: hidden;
-        }
-        
-        .splash-loader::after {
-            content: '';
-            display: block;
-            width: 40px;
-            height: 100%;
-            background: white;
-            animation: loading 1.5s infinite;
-        }
-        
-        @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(200%); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; }
-        }
-    </style>
 </head>
 <body data-theme="light">
-    <!-- Splash Screen -->
-    <div id="splash-screen">
-        <div class="splash-logo">
-            <i class="fas fa-question-circle"></i>
-        </div>
-        <div class="splash-text">Memuat Quiz...</div>
-        <div class="splash-loader"></div>
-    </div>
-
-    <!-- Network Status -->
-    <div class="network-status" id="networkStatus"></div>
-
     <div class="app">
         <!-- Header -->
         <header class="topbar">
@@ -126,10 +16,7 @@
                 <p class="muted" id="pageSubtitle" style="font-size: 12px; margin-top: 2px;">Memuat...</p>
             </div>
             <div class="top-actions">
-                <a href="index.html" class="btn secondary mobile-only">
-                    <i class="fas fa-home"></i>
-                </a>
-                <a href="index.html" class="btn secondary desktop-only">
+                <a href="index.html" class="btn secondary">
                     <i class="fas fa-home"></i> Home
                 </a>
             </div>
@@ -165,13 +52,10 @@
                         <div class="quiz-progress" id="quizProgress">Soal 0/0</div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button id="timerBtn" class="btn ghost">
+                        <button id="timerBtn" class="btn secondary">
                             <i class="fas fa-clock"></i> <span id="timer">00:00</span>
                         </button>
-                        <button id="quitBtn" class="btn secondary mobile-only">
-                            <i class="fas fa-sign-out-alt"></i>
-                        </button>
-                        <button id="quitBtn" class="btn secondary desktop-only">
+                        <button id="quitBtn" class="btn secondary">
                             <i class="fas fa-sign-out-alt"></i> Keluar
                         </button>
                     </div>
@@ -183,37 +67,17 @@
                 
                 <div class="quiz-controls" style="display: flex; justify-content: space-between; margin-top: 24px;">
                     <button id="prevBtn" class="btn secondary" style="display: none;">
-                        <i class="fas fa-arrow-left"></i> <span class="desktop-only">Sebelumnya</span>
+                        <i class="fas fa-arrow-left"></i> Sebelumnya
                     </button>
                     <button id="nextBtn" class="btn primary">
-                        <span class="desktop-only">Berikutnya</span> <i class="fas fa-arrow-right"></i>
+                        Berikutnya <i class="fas fa-arrow-right"></i>
                     </button>
                     <button id="finishBtn" class="btn primary" style="background: #25D366; display: none;">
-                        <i class="fas fa-flag-checkered"></i> <span class="desktop-only">Selesaikan</span>
+                        <i class="fas fa-flag-checkered"></i> Selesaikan
                     </button>
                 </div>
             </div>
         </main>
-
-        <!-- Mobile Bottom Navigation -->
-        <nav class="mobile-bottom-nav">
-            <a href="index.html" class="nav-item">
-                <i class="fas fa-home"></i>
-                <span>Home</span>
-            </a>
-            <a href="quiz.html" class="nav-item active">
-                <i class="fas fa-play-circle"></i>
-                <span>Quiz</span>
-            </a>
-            <a href="result.html" class="nav-item">
-                <i class="fas fa-chart-bar"></i>
-                <span>Hasil</span>
-            </a>
-            <a href="admin.html" class="nav-item">
-                <i class="fas fa-cog"></i>
-                <span>Admin</span>
-            </a>
-        </nav>
 
         <!-- Footer -->
         <footer class="footer">
@@ -238,95 +102,634 @@
         </div>
     </div>
 
-    <!-- JavaScript dengan optimasi mobile -->
-    <script>
-        // Hide splash screen
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                document.getElementById('splash-screen').classList.add('hidden');
-                setTimeout(() => {
-                    document.getElementById('splash-screen').style.display = 'none';
-                }, 500);
-            }, 1000);
-        });
-        
-        // Network status
-        function updateNetworkStatus() {
-            const statusElement = document.getElementById('networkStatus');
-            if (navigator.onLine) {
-                statusElement.textContent = 'Anda online';
-                statusElement.className = 'network-status online';
-                setTimeout(() => {
-                    statusElement.style.transform = 'translateY(-100%)';
-                }, 3000);
-            } else {
-                statusElement.textContent = 'Anda offline - Beberapa fitur terbatas';
-                statusElement.className = 'network-status offline';
-            }
-        }
-        
-        window.addEventListener('online', updateNetworkStatus);
-        window.addEventListener('offline', updateNetworkStatus);
-        updateNetworkStatus();
-        
-        // Touch optimization: prevent double tap zoom
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', (event) => {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, false);
-        
-        // Prevent pull-to-refresh on mobile
-        document.body.addEventListener('touchmove', (e) => {
-            if (e.touches.length > 1) return; // Multi-touch
-            if (document.querySelector('.modal[style*="display: flex"]')) {
-                e.preventDefault(); // Jika modal terbuka, biarkan scroll di modal
-            }
-        }, { passive: false });
-    </script>
+    <!-- JavaScript -->
+    <script type="module">
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
+            authDomain: "quizappfaizul.firebaseapp.com",
+            projectId: "quizappfaizul",
+            storageBucket: "quizappfaizul.firebasestorage.app",
+            messagingSenderId: "177544522930",
+            appId: "1:177544522930:web:354794b407cf29d86cedab"
+        };
 
-    <script type="module" src="user.js"></script>
-    <script src="install.js" defer></script>
-    
-    <style>
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
+        // Import Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { 
+            getFirestore, 
+            collection, 
+            getDocs,
+            query,
+            orderBy,
+            addDoc,
+            serverTimestamp,
+            doc,
+            getDoc
+        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Get mataKuliahId from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const mataKuliahId = urlParams.get('mataKuliah') || null;
+
+        // State
+        let currentCourse = null;
+        let originalQuestions = [];
+        let randomizedQuestions = [];
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
+        let timer = 0;
+        let timerInterval = null;
+
+        // DOM Elements
+        const pageTitle = document.getElementById('pageTitle');
+        const pageSubtitle = document.getElementById('pageSubtitle');
+        const coursesSection = document.getElementById('coursesSection');
+        const coursesList = document.getElementById('coursesList');
+        const backBtn = document.getElementById('backBtn');
+        const quizSection = document.getElementById('quizSection');
+        const quizProgress = document.getElementById('quizProgress');
+        const quizContainer = document.getElementById('quizContainer');
+        const timerDisplay = document.getElementById('timer');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const finishBtn = document.getElementById('finishBtn');
+        const quitBtn = document.getElementById('quitBtn');
+        const themeToggle = document.getElementById('themeToggle');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmCancel = document.getElementById('confirmCancel');
+        const confirmOk = document.getElementById('confirmOk');
+
+        // ========== FUNGSI UTILITY ==========
+
+        // Natural sort function
+        function naturalSort(a, b) {
+            const extractNumbers = (str) => {
+                const matches = str?.match(/\d+/g);
+                return matches ? matches.map(Number) : [];
+            };
+
+            const aNumbers = extractNumbers(a.nama || '');
+            const bNumbers = extractNumbers(b.nama || '');
+            
+            if (aNumbers.length > 0 && bNumbers.length > 0) {
+                if (aNumbers[0] !== bNumbers[0]) {
+                    return aNumbers[0] - bNumbers[0];
+                }
+            }
+            
+            return (a.nama || '').localeCompare(b.nama || '', undefined, { 
+                numeric: true, 
+                sensitivity: 'base' 
+            });
         }
-        
-        .modal-content {
-            background: var(--bg-secondary);
-            border-radius: 16px;
-            padding: 24px;
-            max-width: 400px;
-            width: 100%;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+
+        // Shuffle array
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
         }
-        
-        .modal h3 {
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+
+        // Prepare randomized quiz
+        function prepareRandomizedQuiz(questions) {
+            if (!questions || questions.length === 0) return [];
+            
+            // Acak urutan soal
+            const shuffledQuestions = shuffleArray(questions);
+            
+            // Untuk setiap soal, acak pilihan jawabannya
+            return shuffledQuestions.map(question => {
+                const options = question.pilihan || question.options || {};
+                const correctAnswer = question.jawaban || question.correct;
+                
+                const optionsArray = Object.entries(options);
+                if (optionsArray.length === 0) return question;
+                
+                // Acak urutan pilihan
+                const shuffledOptions = shuffleArray(optionsArray);
+                let newCorrectAnswer = '';
+                const newOptions = {};
+                
+                // Rekonstruksi options dengan label baru
+                shuffledOptions.forEach(([originalKey, value], idx) => {
+                    const newKey = String.fromCharCode(65 + idx);
+                    newOptions[newKey] = value;
+                    
+                    if (originalKey === correctAnswer) {
+                        newCorrectAnswer = newKey;
+                    }
+                });
+                
+                // Validasi jika jawaban tidak ditemukan
+                if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
+                    const correctText = options[correctAnswer];
+                    Object.entries(newOptions).forEach(([key, value]) => {
+                        if (value === correctText) {
+                            newCorrectAnswer = key;
+                        }
+                    });
+                }
+                
+                // Jika masih tidak ditemukan, gunakan yang pertama
+                if (!newCorrectAnswer && Object.keys(newOptions).length > 0) {
+                    newCorrectAnswer = Object.keys(newOptions)[0];
+                }
+                
+                return {
+                    ...question,
+                    pilihan: newOptions,
+                    jawaban: newCorrectAnswer,
+                    originalCorrectAnswer: correctAnswer
+                };
+            });
         }
-        
-        .modal p {
-            color: var(--text-secondary);
-            line-height: 1.6;
+
+        // ========== LOAD COURSES ==========
+
+        async function loadCourses() {
+            if (!mataKuliahId) {
+                coursesList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3 style="margin-bottom: 8px;">Mata Kuliah Tidak Ditemukan</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 20px;">Silakan pilih mata kuliah dari halaman utama</p>
+                        <a href="index.html" class="btn primary">
+                            <i class="fas fa-home"></i> Kembali ke Home
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                // Update UI
+                pageTitle.textContent = 'Memuat Course...';
+                pageSubtitle.textContent = 'Harap tunggu...';
+                
+                // Cek apakah mata kuliah ada
+                const mataKuliahDoc = await getDoc(doc(db, "mata_kuliah", mataKuliahId));
+                
+                if (!mataKuliahDoc.exists()) {
+                    coursesList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <h3 style="margin-bottom: 8px; color: #ff3b30;">Mata Kuliah Tidak Ditemukan</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 20px;">Mata kuliah ini tidak ada di database</p>
+                            <a href="index.html" class="btn primary">
+                                <i class="fas fa-home"></i> Kembali ke Home
+                            </a>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const mataKuliahData = mataKuliahDoc.data();
+                
+                // Update page title dengan nama mata kuliah
+                pageTitle.textContent = mataKuliahData.nama || 'Quiz';
+                pageSubtitle.textContent = 'Pilih course untuk mulai belajar';
+                
+                // Load courses dari subcollection
+                const coursesRef = collection(db, "mata_kuliah", mataKuliahId, "courses");
+                const coursesQuery = query(coursesRef, orderBy("nama", "asc"));
+                const coursesSnapshot = await getDocs(coursesQuery);
+                
+                if (coursesSnapshot.empty) {
+                    coursesList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-folder-open"></i>
+                            </div>
+                            <h3 style="margin-bottom: 8px;">Belum ada Course</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 20px;">Tidak ada course yang tersedia di mata kuliah ini</p>
+                            <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                <a href="index.html" class="btn primary">
+                                    <i class="fas fa-arrow-left"></i> Pilih Mata Kuliah Lain
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Process courses data
+                let courses = [];
+                coursesSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    courses.push({
+                        id: doc.id,
+                        nama: data.nama || data.name || 'Course Tanpa Nama',
+                        description: data.description || 'Tidak ada deskripsi',
+                        totalSoal: data.totalSoal || 0,
+                        createdAt: data.createdAt || null
+                    });
+                });
+                
+                // Natural sort
+                courses.sort(naturalSort);
+                
+                // Render courses
+                coursesList.innerHTML = courses.map((course, index) => `
+                    <div class="course-item">
+                        <div class="left">
+                            <div class="course-badge">${course.nama?.charAt(0)?.toUpperCase() || 'C'}</div>
+                            <div>
+                                <h3 style="margin-bottom: 4px;">${course.nama}</h3>
+                                <p class="muted" style="font-size: 14px;">${course.description}</p>
+                                <div style="display: flex; gap: 12px; margin-top: 8px; align-items: center;">
+                                    <span class="badge">${course.totalSoal} Soal</span>
+                                    <span class="muted" style="font-size: 13px;">
+                                        <i class="fas fa-clock"></i> ${Math.ceil((course.totalSoal || 0) * 1.5)} menit
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-play"></i> Mulai Quiz
+                        </button>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error("Error loading courses:", error);
+                
+                coursesList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 style="margin-bottom: 8px; color: #ff3b30;">Gagal Memuat Course</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 12px;">${error.message}</p>
+                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                            <button onclick="location.reload()" class="btn secondary">
+                                <i class="fas fa-redo"></i> Coba Lagi
+                            </button>
+                            <a href="index.html" class="btn primary">
+                                <i class="fas fa-home"></i> Kembali ke Home
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
         }
-    </style>
+
+        // ========== START QUIZ ==========
+
+        window.startQuiz = async function(courseId, courseName) {
+            currentCourse = { id: courseId, name: courseName };
+            
+            // Update UI
+            coursesSection.style.display = 'none';
+            quizSection.style.display = 'block';
+            pageTitle.textContent = courseName;
+            pageSubtitle.textContent = 'Sedang mengerjakan...';
+            backBtn.style.display = 'flex';
+            
+            try {
+                // Load questions from Firestore
+                const questionsRef = collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal");
+                const questionsSnapshot = await getDocs(questionsRef);
+                
+                if (questionsSnapshot.empty) {
+                    quizContainer.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-question-circle"></i>
+                            </div>
+                            <h3 style="margin-bottom: 8px;">Belum ada Soal</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 20px;">Tidak ada soal yang tersedia di course ini</p>
+                            <button onclick="showCourses()" class="btn primary">
+                                <i class="fas fa-arrow-left"></i> Kembali ke Course
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Process questions data
+                originalQuestions = [];
+                questionsSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    originalQuestions.push({
+                        id: doc.id,
+                        pertanyaan: data.pertanyaan || data.question || 'Pertanyaan tidak tersedia',
+                        pilihan: data.pilihan || data.options || {},
+                        jawaban: data.jawaban || data.correct || '',
+                        explanation: data.explanation || ''
+                    });
+                });
+                
+                // Randomize questions
+                randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
+                
+                // Initialize quiz state
+                currentQuestionIndex = 0;
+                userAnswers = {};
+                timer = 0;
+                
+                // Start timer
+                if (timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    timer++;
+                    const minutes = Math.floor(timer / 60).toString().padStart(2, '0');
+                    const seconds = (timer % 60).toString().padStart(2, '0');
+                    timerDisplay.textContent = `${minutes}:${seconds}`;
+                }, 1000);
+                
+                // Render first question
+                renderQuestion();
+                
+            } catch (error) {
+                console.error("Error loading questions:", error);
+                
+                quizContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 style="margin-bottom: 8px; color: #ff3b30;">Gagal Memuat Soal</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 12px;">${error.message}</p>
+                        <button onclick="showCourses()" class="btn primary">
+                            <i class="fas fa-arrow-left"></i> Kembali
+                        </button>
+                    </div>
+                `;
+            }
+        };
+
+        // ========== RENDER QUESTION ==========
+
+        function renderQuestion() {
+            if (!randomizedQuestions || randomizedQuestions.length === 0) {
+                return;
+            }
+            
+            const question = randomizedQuestions[currentQuestionIndex];
+            if (!question) {
+                return;
+            }
+            
+            // Update progress
+            quizProgress.textContent = `Soal ${currentQuestionIndex + 1}/${randomizedQuestions.length}`;
+            
+            // Render question and options
+            quizContainer.innerHTML = `
+                <div class="q-text">
+                    <b>${currentQuestionIndex + 1}.</b> ${question.pertanyaan || 'Pertanyaan tidak tersedia'}
+                </div>
+                <div class="choices">
+                    ${['A', 'B', 'C', 'D'].map(key => {
+                        const optionText = (question.pilihan || {})[key] || '';
+                        const isSelected = userAnswers[currentQuestionIndex] === key;
+                        
+                        if (!optionText || optionText.trim() === '') return '';
+                        
+                        return `
+                            <div class="choice ${isSelected ? 'selected' : ''}" 
+                                 onclick="selectAnswer('${key}')">
+                                <span class="label">${key}.</span>
+                                <span class="text">${optionText}</span>
+                                ${isSelected ? '<span style="color: #25D366; margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+            
+            // Update button states
+            prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
+            nextBtn.style.display = currentQuestionIndex < randomizedQuestions.length - 1 ? 'flex' : 'none';
+            finishBtn.style.display = currentQuestionIndex === randomizedQuestions.length - 1 ? 'flex' : 'none';
+        }
+
+        // ========== SELECT ANSWER ==========
+
+        window.selectAnswer = function(answer) {
+            userAnswers[currentQuestionIndex] = answer;
+            renderQuestion();
+        };
+
+        // ========== NAVIGATION ==========
+
+        prevBtn.addEventListener('click', () => {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                renderQuestion();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentQuestionIndex < randomizedQuestions.length - 1) {
+                currentQuestionIndex++;
+                renderQuestion();
+            }
+        });
+
+        // ========== FINISH QUIZ ==========
+
+        async function finishQuiz() {
+            // Confirm before finishing
+            const confirmed = confirm("Apakah Anda yakin ingin menyelesaikan quiz?");
+            if (!confirmed) return;
+            
+            // Stop timer
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            // Calculate score
+            let score = 0;
+            const results = randomizedQuestions.map((q, index) => {
+                const userAnswerKey = userAnswers[index];
+                const correctAnswerKey = q.jawaban;
+                const isCorrect = userAnswerKey === correctAnswerKey;
+                
+                if (isCorrect) score++;
+                
+                // Get full answer texts
+                const userAnswerText = userAnswerKey 
+                    ? `${userAnswerKey}. ${q.pilihan[userAnswerKey] || 'Tidak ada teks jawaban'}` 
+                    : 'Tidak dijawab';
+                
+                const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
+                
+                // Get all options
+                const allOptions = [];
+                for (const [key, value] of Object.entries(q.pilihan || {})) {
+                    if (value && value.trim() !== '') {
+                        allOptions.push(`${key}. ${value}`);
+                    }
+                }
+                
+                return {
+                    question: q.pertanyaan || 'Pertanyaan tidak tersedia',
+                    questionNumber: index + 1,
+                    userAnswerKey,
+                    userAnswerText,
+                    correctAnswerKey,
+                    correctAnswerText,
+                    isCorrect,
+                    explanation: q.explanation || '',
+                    allOptions: allOptions.join(' | ')
+                };
+            });
+            
+            const percentage = Math.round((score / randomizedQuestions.length) * 100);
+            
+            // Save result to localStorage
+            const result = {
+                courseName: currentCourse.name,
+                courseId: currentCourse.id,
+                totalQuestions: randomizedQuestions.length,
+                score: score,
+                percentage: percentage,
+                timeSpent: timer,
+                results: results,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem('quizResult', JSON.stringify(result));
+            
+            // Save to Firebase
+            try {
+                const resultData = {
+                    courseId: currentCourse.id,
+                    courseName: currentCourse.name,
+                    mataKuliahId: mataKuliahId,
+                    score: score,
+                    totalQuestions: randomizedQuestions.length,
+                    percentage: percentage,
+                    timeSpent: timer,
+                    timestamp: serverTimestamp(),
+                    userId: 'anonymous'
+                };
+                
+                await addDoc(collection(db, "quiz_results"), resultData);
+            } catch (error) {
+                console.error("Error saving result to Firebase:", error);
+                // Tetap lanjutkan meski Firebase error
+            }
+            
+            // Redirect to result page
+            window.location.href = 'result.html';
+        }
+
+        // ========== QUIZ CONTROLS ==========
+
+        finishBtn.addEventListener('click', finishQuiz);
+
+        quitBtn.addEventListener('click', () => {
+            confirmMessage.textContent = 'Apakah Anda yakin ingin keluar dari quiz? Semua jawaban akan hilang.';
+            confirmModal.style.display = 'flex';
+        });
+
+        confirmCancel.addEventListener('click', () => {
+            confirmModal.style.display = 'none';
+        });
+
+        confirmOk.addEventListener('click', () => {
+            confirmModal.style.display = 'none';
+            showCourses();
+        });
+
+        // ========== SHOW COURSES ==========
+
+        window.showCourses = function() {
+            // Stop timer
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            // Reset quiz state
+            currentQuestionIndex = 0;
+            userAnswers = {};
+            randomizedQuestions = [];
+            timer = 0;
+            timerDisplay.textContent = '00:00';
+            
+            // Update UI
+            quizSection.style.display = 'none';
+            coursesSection.style.display = 'block';
+            pageTitle.textContent = 'Quiz';
+            pageSubtitle.textContent = 'Pilih course';
+            backBtn.style.display = 'none';
+            
+            // Reload courses
+            loadCourses();
+        };
+
+        // ========== THEME MANAGEMENT ==========
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('quiz-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('quiz-theme', newTheme);
+            
+            themeToggle.innerHTML = newTheme === 'dark' 
+                ? '<i class="fas fa-sun"></i>' 
+                : '<i class="fas fa-moon"></i>';
+        }
+
+        // ========== INITIALIZATION ==========
+
+        // Back button handler
+        backBtn.addEventListener('click', showCourses);
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize theme
+            initTheme();
+            
+            // Theme toggle event
+            themeToggle.addEventListener('click', toggleTheme);
+            
+            // Load courses
+            loadCourses();
+            
+            // Close modal when clicking outside
+            confirmModal.addEventListener('click', (e) => {
+                if (e.target === confirmModal) {
+                    confirmModal.style.display = 'none';
+                }
+            });
+            
+            // Make functions globally available
+            window.toggleTheme = toggleTheme;
+            window.selectAnswer = selectAnswer;
+            window.startQuiz = startQuiz;
+            window.showCourses = showCourses;
+            window.finishQuiz = finishQuiz;
+        });
+    </script>
 </body>
 </html>
