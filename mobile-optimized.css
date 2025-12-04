@@ -1,0 +1,447 @@
+/* ========================= */
+/* MOBILE & PWA OPTIMIZATION */
+/* ========================= */
+
+/* Safe Area untuk iPhone dengan Notch */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+/* Fix untuk mobile viewport */
+html {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  overflow-x: hidden;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+/* Standalone Mode Styles */
+.pwa-standalone .topbar {
+  padding-top: max(12px, var(--safe-area-top)) !important;
+  padding-bottom: max(12px, var(--safe-area-bottom)) !important;
+}
+
+.pwa-standalone .theme-switcher {
+  bottom: max(24px, var(--safe-area-bottom)) !important;
+  right: max(20px, var(--safe-area-right)) !important;
+}
+
+/* Mobile Header Fix */
+@media (max-width: 768px) {
+  .topbar {
+    padding: 8px 16px !important;
+    min-height: 56px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important;
+  }
+  
+  .topbar h1 {
+    font-size: 16px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Touch-Friendly Buttons */
+.btn, button {
+  min-height: 44px !important;
+  min-width: 44px !important;
+  touch-action: manipulation;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+/* Remove tap highlight on mobile */
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover, button:hover, .choice:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  
+  /* Active state untuk touch */
+  .btn:active, button:active, .choice:active {
+    transform: scale(0.98) !important;
+    opacity: 0.9 !important;
+  }
+}
+
+/* Better Form Inputs for Mobile */
+input, select, textarea {
+  font-size: 16px !important; /* Mencegah zoom di iOS */
+  touch-action: manipulation;
+}
+
+@media (max-width: 768px) {
+  input, select, textarea {
+    padding: 14px 16px !important;
+    min-height: 48px !important;
+  }
+  
+  .form-group {
+    margin-bottom: 20px !important;
+  }
+}
+
+/* Quiz Mobile Optimizations */
+@media (max-width: 768px) {
+  .quiz-container {
+    padding: 12px !important;
+  }
+  
+  .question-card {
+    padding: 16px !important;
+    margin: 8px 0 !important;
+  }
+  
+  .q-text {
+    font-size: 16px !important;
+    line-height: 1.5 !important;
+    padding: 16px !important;
+  }
+  
+  .choice {
+    margin: 8px 0 !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+    min-height: 60px !important;
+  }
+  
+  .choice-label {
+    min-width: 28px !important;
+    font-size: 18px !important;
+  }
+  
+  .choice-text {
+    font-size: 15px !important;
+  }
+}
+
+/* Course List Mobile Optimizations */
+.course-item {
+  transition: transform 0.2s ease;
+  will-change: transform;
+}
+
+@media (max-width: 768px) {
+  .course-item {
+    padding: 16px !important;
+    margin: 8px 0 !important;
+    border-radius: 12px !important;
+  }
+  
+  .course-badge {
+    width: 50px !important;
+    height: 50px !important;
+    font-size: 20px !important;
+  }
+  
+  .course-details h3 {
+    font-size: 16px !important;
+    margin-bottom: 4px !important;
+  }
+  
+  .course-details p {
+    font-size: 13px !important;
+    margin-bottom: 8px !important;
+  }
+}
+
+/* Loading States for Mobile */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(37, 211, 102, 0.1);
+  border-top-color: var(--whatsapp-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+
+/* Network Status Indicator */
+.network-status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #FF9500;
+  color: white;
+  text-align: center;
+  padding: 10px;
+  z-index: 10000;
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+
+.network-status.online {
+  background: #25D366;
+  transform: translateY(0);
+}
+
+.network-status.offline {
+  background: #FF3B30;
+  transform: translateY(0);
+}
+
+/* Pull-to-Refresh Prevention */
+@media (max-width: 768px) {
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Modal Mobile Optimization */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 10px !important;
+    border-radius: 16px !important;
+  }
+  
+  .modal-body {
+    padding: 20px !important;
+  }
+  
+  .modal-header {
+    padding: 16px !important;
+  }
+}
+
+/* Bottom Navigation for Mobile (jika perlu) */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 8px 0;
+  display: none;
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    padding-bottom: max(8px, var(--safe-area-bottom));
+  }
+  
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 12px;
+  }
+  
+  .nav-item.active {
+    color: var(--whatsapp-green);
+  }
+  
+  .nav-item i {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+}
+
+/* Splash Screen for PWA */
+#splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--whatsapp-teal-green);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease;
+}
+
+#splash-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-logo {
+  width: 80px;
+  height: 80px;
+  background: white;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  animation: pulse 2s infinite;
+}
+
+.splash-logo i {
+  font-size: 40px;
+  color: var(--whatsapp-green);
+}
+
+.splash-text {
+  color: white;
+  font-size: 18px;
+  font-weight: 500;
+  margin-top: 20px;
+}
+
+/* Landscape Mode Optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar {
+    min-height: 48px !important;
+    padding: 4px 12px !important;
+  }
+  
+  .container {
+    padding: 8px !important;
+  }
+  
+  .card {
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+  }
+  
+  .quiz-progress {
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+  }
+}
+
+/* High DPI Screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .choice, .btn, .course-item {
+    border-width: 1.5px;
+  }
+}
+
+/* Dark Mode Adjustments */
+[data-theme="dark"] .mobile-bottom-nav {
+  background: #111b21;
+  border-top-color: #2a3942;
+}
+
+[data-theme="dark"] .network-status {
+  background: #333;
+}
+
+/* Scrollbar untuk Mobile */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--whatsapp-green);
+    border-radius: 2px;
+  }
+}
+
+/* Prevent text selection on mobile */
+@media (max-width: 768px) {
+  .btn, button, .choice, .course-item {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* Animation Keyframes */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(100%); opacity: 0; }
+}
+
+/* Utility Classes untuk Mobile */
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: block !important;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block !important;
+  }
+  
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* Fix untuk iOS elastic scrolling */
+body {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Better focus states for accessibility */
+@media (max-width: 768px) {
+  .btn:focus-visible,
+  button:focus-visible,
+  .choice:focus-visible,
+  input:focus-visible {
+    outline: 3px solid var(--whatsapp-green);
+    outline-offset: 2px;
+  }
+}
+
+/* Performance optimizations */
+.course-item, .choice, .btn {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
