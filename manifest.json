@@ -1,13 +1,40 @@
 {
-  "name": "QuizApp",
+  "name": "QuizApp - Belajar Interaktif",
   "short_name": "QuizApp",
-  "description": "Aplikasi Quiz Interaktif",
+  "description": "Aplikasi quiz pembelajaran dengan fitur lengkap",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#075E54",
   "theme_color": "#075E54",
   "orientation": "portrait",
+  "categories": ["education", "productivity"],
   "icons": [
+    {
+      "src": "https://img.icons8.com/color/72/whatsapp.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://img.icons8.com/color/96/whatsapp.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/128/whatsapp.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/144/whatsapp.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/152/whatsapp.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
     {
       "src": "https://img.icons8.com/color/192/whatsapp.png",
       "sizes": "192x192",
@@ -18,5 +45,41 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "https://img.icons8.com/color/480/000000/quiz.png",
+      "sizes": "480x480",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "QuizApp Home Screen"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mulai Quiz",
+      "short_name": "Quiz",
+      "description": "Mulai quiz baru",
+      "url": "/quiz.html",
+      "icons": [
+        {
+          "src": "https://img.icons8.com/color/96/000000/quiz.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Hasil Quiz",
+      "short_name": "Hasil",
+      "description": "Lihat hasil quiz terakhir",
+      "url": "/result.html",
+      "icons": [
+        {
+          "src": "https://img.icons8.com/color/96/000000/test-passed.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
 }
