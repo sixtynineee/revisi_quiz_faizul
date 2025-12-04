@@ -1,26 +1,172 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <!-- WAJIB untuk responsive mobile -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#075E54">
+    <!-- PWA & Mobile Meta Tags -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#075E54" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c1317" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <!-- Touch icon untuk Android -->
+    <meta name="apple-mobile-web-app-title" content="QuizApp">
+    <meta name="application-name" content="QuizApp">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-TileColor" content="#075E54">
+    <meta name="msapplication-tap-highlight" content="no">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+    
+    <!-- Icons -->
     <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/color/192/whatsapp.png">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/whatsapp.png">
-
-    <!-- PWA manifest (opsional) -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-startup-image" href="https://img.icons8.com/color/512/whatsapp.png">
+    
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QuizApp - Admin Dashboard</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="mobile-optimized.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <style>
+        /* Mobile optimizations for admin dashboard */
+        @media (max-width: 768px) {
+            .admin-container {
+                flex-direction: column !important;
+            }
+            
+            .left-panel {
+                width: 100% !important;
+                min-width: 100% !important;
+                margin-bottom: 16px;
+            }
+            
+            .right-panel {
+                min-height: auto !important;
+            }
+            
+            .content-header {
+                flex-direction: column !important;
+                gap: 16px !important;
+                align-items: flex-start !important;
+            }
+            
+            .data-table-container {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+            
+            .data-table {
+                min-width: 600px !important;
+            }
+            
+            .menu-btn {
+                padding: 14px 16px !important;
+                font-size: 15px !important;
+            }
+            
+            .modal-content {
+                margin: 10px !important;
+                max-height: 80vh !important;
+                overflow-y: auto !important;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .topbar {
+                padding: 8px 12px !important;
+            }
+            
+            .topbar h1 {
+                font-size: 16px !important;
+            }
+            
+            .btn {
+                padding: 10px 14px !important;
+                font-size: 13px !important;
+            }
+            
+            .modal-body {
+                padding: 16px !important;
+            }
+            
+            .form-actions {
+                flex-direction: column !important;
+                gap: 8px !important;
+            }
+            
+            .form-actions .btn {
+                width: 100% !important;
+            }
+        }
+        
+        /* Splash screen */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #075E54;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        #splash-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .splash-logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        .splash-logo i {
+            font-size: 40px;
+            color: #25D366;
+        }
+        
+        .splash-text {
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+    </style>
 </head>
 <body data-theme="light">
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="splash-logo">
+            <i class="fas fa-cogs"></i>
+        </div>
+        <div class="splash-text">Admin Dashboard</div>
+    </div>
+
     <div class="app">
         <!-- Header -->
         <header class="topbar">
@@ -34,13 +180,22 @@
                 </div>
             </div>
             <div class="top-actions">
-                <button id="refreshBtn" class="btn secondary">
+                <button id="refreshBtn" class="btn secondary mobile-only">
+                    <i class="fas fa-redo"></i>
+                </button>
+                <button id="refreshBtn" class="btn secondary desktop-only">
                     <i class="fas fa-redo"></i> Refresh
                 </button>
-                <button id="logoutBtn" class="btn secondary">
+                <button id="logoutBtn" class="btn secondary mobile-only">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+                <button id="logoutBtn" class="btn secondary desktop-only">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
-                <a href="index.html" class="btn primary">
+                <a href="index.html" class="btn primary mobile-only">
+                    <i class="fas fa-eye"></i>
+                </a>
+                <a href="index.html" class="btn primary desktop-only">
                     <i class="fas fa-eye"></i> View Site
                 </a>
             </div>
@@ -93,7 +248,7 @@
                             <h2 id="contentTitle">Dashboard Admin</h2>
                             <p class="muted" id="contentSubtitle">Kelola data quiz Anda</p>
                         </div>
-                        <div id="actionButtons" style="display: flex; gap: 8px;">
+                        <div id="actionButtons" style="display: flex; gap: 8px; flex-wrap: wrap;">
                             <!-- Action buttons will be added dynamically -->
                         </div>
                     </div>
@@ -111,7 +266,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <small>© 2024 QuizApp • Admin Dashboard</small>
                 <div class="muted" style="font-size: 12px;">
                     <span id="lastUpdated">Terakhir diupdate: -</span>
@@ -141,6 +296,54 @@
     </div>
 
     <script type="module" src="edit.js"></script>
+    
+    <script>
+        // Hide splash screen
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('splash-screen').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('splash-screen').style.display = 'none';
+                }, 500);
+            }, 500);
+        });
+        
+        // Touch optimization for modals
+        document.addEventListener('touchstart', function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Network status
+        function updateNetworkStatus() {
+            if (!navigator.onLine) {
+                const statusDiv = document.createElement('div');
+                statusDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #FF9500; color: white; text-align: center; padding: 10px; z-index: 10000;';
+                statusDiv.innerHTML = '<i class="fas fa-wifi-slash"></i> Anda sedang offline - Beberapa fitur admin mungkin terbatas';
+                document.body.prepend(statusDiv);
+                
+                setTimeout(() => {
+                    if (statusDiv.parentNode) {
+                        statusDiv.parentNode.removeChild(statusDiv);
+                    }
+                }, 5000);
+            }
+        }
+        
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
+        
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
     
     <style>
         .admin-container {
@@ -177,6 +380,7 @@
             align-items: center;
             gap: 10px;
             transition: all 0.2s ease;
+            min-height: 44px;
         }
         
         .menu-btn:hover {
@@ -291,6 +495,8 @@
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
+            min-height: 36px;
+            min-width: 36px;
         }
         
         .modal-close:hover {
@@ -425,4 +631,3 @@
     </style>
 </body>
 </html>
-
