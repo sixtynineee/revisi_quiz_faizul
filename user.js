@@ -1,4 +1,4 @@
-// user.js - REVISI UNTUK MOBILE & OFFLINE SUPPORT
+// user.js - REVISI FIXED UNTUK KONEKSI FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -8,39 +8,23 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// Lazy load Firebase
-let firebaseApp, firebaseAuth, firebaseFirestore;
+// Import Firebase
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs,
+  query,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+  doc,
+  getDoc
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-async function loadFirebase() {
-  if (typeof firebase === 'undefined') {
-    await Promise.all([
-      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"),
-      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"),
-      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js")
-    ]);
-  }
-  
-  if (!firebase.apps.length) {
-    firebaseApp = firebase.initializeApp(firebaseConfig);
-  } else {
-    firebaseApp = firebase.apps[0];
-  }
-  
-  firebaseAuth = firebase.auth;
-  firebaseFirestore = firebase.firestore;
-  
-  return { firebaseApp, firebaseAuth, firebaseFirestore };
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 // Get mataKuliahId from URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -54,7 +38,6 @@ let currentQuestionIndex = 0;
 let userAnswers = {};
 let timer = 0;
 let timerInterval = null;
-let isOnline = navigator.onLine;
 
 // DOM Elements
 const pageTitle = document.getElementById('pageTitle');
@@ -72,10 +55,16 @@ const finishBtn = document.getElementById('finishBtn');
 const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
 
-// ========== FUNGSI NATURAL SORT ==========
+// Debug info
+console.log("Firebase initialized:", !!app);
+console.log("Mata Kuliah ID from URL:", mataKuliahId);
+
+// ========== FUNGSI UTILITY ==========
+
+// Natural sort function
 function naturalSort(a, b) {
   const extractNumbers = (str) => {
-    const matches = str.match(/\d+/g);
+    const matches = str?.match(/\d+/g);
     return matches ? matches.map(Number) : [];
   };
 
@@ -94,7 +83,7 @@ function naturalSort(a, b) {
   });
 }
 
-// ========== FUNGSI PENGACAKAN ==========
+// Shuffle array
 function shuffleArray(array) {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -104,11 +93,14 @@ function shuffleArray(array) {
   return shuffled;
 }
 
+// Prepare randomized quiz
 function prepareRandomizedQuiz(questions) {
   if (!questions || questions.length === 0) return [];
   
+  // Acak urutan soal
   const shuffledQuestions = shuffleArray(questions);
   
+  // Untuk setiap soal, acak pilihan jawabannya
   return shuffledQuestions.map(question => {
     const options = question.pilihan || question.options || {};
     const correctAnswer = question.jawaban || question.correct;
@@ -116,10 +108,12 @@ function prepareRandomizedQuiz(questions) {
     const optionsArray = Object.entries(options);
     if (optionsArray.length === 0) return question;
     
+    // Acak urutan pilihan
     const shuffledOptions = shuffleArray(optionsArray);
     let newCorrectAnswer = '';
     const newOptions = {};
     
+    // Rekonstruksi options dengan label baru
     shuffledOptions.forEach(([originalKey, value], idx) => {
       const newKey = String.fromCharCode(65 + idx);
       newOptions[newKey] = value;
@@ -129,6 +123,7 @@ function prepareRandomizedQuiz(questions) {
       }
     });
     
+    // Validasi jika jawaban tidak ditemukan
     if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
       const correctText = options[correctAnswer];
       Object.entries(newOptions).forEach(([key, value]) => {
@@ -136,6 +131,11 @@ function prepareRandomizedQuiz(questions) {
           newCorrectAnswer = key;
         }
       });
+    }
+    
+    // Jika masih tidak ditemukan, gunakan yang pertama
+    if (!newCorrectAnswer && Object.keys(newOptions).length > 0) {
+      newCorrectAnswer = Object.keys(newOptions)[0];
     }
     
     return {
@@ -147,9 +147,11 @@ function prepareRandomizedQuiz(questions) {
   });
 }
 
-// ========== FUNGSI UTAMA ==========
-// Load Courses dengan natural sorting
+// ========== LOAD COURSES ==========
+
 async function loadCourses() {
+  console.log("Loading courses for mataKuliah:", mataKuliahId);
+  
   if (!mataKuliahId) {
     coursesList.innerHTML = `
       <div class="empty-state">
@@ -167,24 +169,44 @@ async function loadCourses() {
   }
   
   try {
-    const { firebaseFirestore } = await loadFirebase();
-    const db = firebaseFirestore();
+    // Update UI
+    pageTitle.textContent = 'Memuat Course...';
+    pageSubtitle.textContent = 'Harap tunggu...';
     
-    const coursesSnapshot = await firebaseFirestore.getDocs(
-      firebaseFirestore.query(
-        firebaseFirestore.collection(db, "mata_kuliah", mataKuliahId, "courses"),
-        firebaseFirestore.orderBy("nama", "asc")
-      )
-    );
+    // Cek apakah mata kuliah ada
+    const mataKuliahDoc = await getDoc(doc(db, "mata_kuliah", mataKuliahId));
     
-    let courses = coursesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    if (!mataKuliahDoc.exists()) {
+      coursesList.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <h3 style="margin-bottom: 8px; color: #ff3b30;">Mata Kuliah Tidak Ditemukan</h3>
+          <p style="color: var(--text-muted); margin-bottom: 20px;">Mata kuliah ini tidak ada di database</p>
+          <a href="index.html" class="btn primary">
+            <i class="fas fa-home"></i> Kembali ke Home
+          </a>
+        </div>
+      `;
+      return;
+    }
     
-    courses.sort(naturalSort);
+    const mataKuliahData = mataKuliahDoc.data();
+    console.log("Mata Kuliah Data:", mataKuliahData);
     
-    if (courses.length === 0) {
+    // Update page title dengan nama mata kuliah
+    pageTitle.textContent = mataKuliahData.nama || 'Quiz';
+    pageSubtitle.textContent = 'Pilih course untuk mulai belajar';
+    
+    // Load courses dari subcollection
+    const coursesRef = collection(db, "mata_kuliah", mataKuliahId, "courses");
+    const coursesQuery = query(coursesRef, orderBy("nama", "asc"));
+    const coursesSnapshot = await getDocs(coursesQuery);
+    
+    console.log("Courses found:", coursesSnapshot.size);
+    
+    if (coursesSnapshot.empty) {
       coursesList.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">
@@ -192,51 +214,75 @@ async function loadCourses() {
           </div>
           <h3 style="margin-bottom: 8px;">Belum ada Course</h3>
           <p style="color: var(--text-muted); margin-bottom: 20px;">Tidak ada course yang tersedia di mata kuliah ini</p>
-          <a href="index.html" class="btn primary">
-            <i class="fas fa-arrow-left"></i> Pilih Mata Kuliah Lain
-          </a>
+          <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <a href="index.html" class="btn primary">
+              <i class="fas fa-arrow-left"></i> Pilih Mata Kuliah Lain
+            </a>
+          </div>
         </div>
       `;
       return;
     }
     
+    // Process courses data
+    let courses = [];
+    coursesSnapshot.forEach(doc => {
+      const data = doc.data();
+      courses.push({
+        id: doc.id,
+        nama: data.nama || data.name || 'Course Tanpa Nama',
+        description: data.description || 'Tidak ada deskripsi',
+        totalSoal: data.totalSoal || 0,
+        createdAt: data.createdAt || null
+      });
+    });
+    
+    console.log("Courses processed:", courses);
+    
+    // Natural sort
+    courses.sort(naturalSort);
+    
+    // Render courses
     coursesList.innerHTML = courses.map((course, index) => `
       <div class="course-item slide-in" style="animation-delay: ${index * 0.05}s;">
         <div class="left">
-          <div class="course-badge">${course.nama?.charAt(0) || 'C'}</div>
+          <div class="course-badge">${course.nama?.charAt(0)?.toUpperCase() || 'C'}</div>
           <div>
-            <h3 style="margin-bottom: 4px;">${course.nama || 'Tanpa Nama'}</h3>
-            <p class="muted">${course.description || 'Tidak ada deskripsi'}</p>
-            <div style="display: flex; gap: 12px; margin-top: 8px;">
-              <span class="badge">${course.totalSoal || 0} Soal</span>
-              <span class="muted">•</span>
+            <h3 style="margin-bottom: 4px;">${course.nama}</h3>
+            <p class="muted" style="font-size: 14px;">${course.description}</p>
+            <div style="display: flex; gap: 12px; margin-top: 8px; align-items: center;">
+              <span class="badge">${course.totalSoal} Soal</span>
               <span class="muted" style="font-size: 13px;">
                 <i class="fas fa-clock"></i> ${Math.ceil((course.totalSoal || 0) * 1.5)} menit
               </span>
             </div>
           </div>
         </div>
-        <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama || 'Course'}')">
-          <i class="fas fa-play"></i> <span class="desktop-only">Mulai Quiz</span>
+        <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama.replace(/'/g, "\\'")}')">
+          <i class="fas fa-play"></i> Mulai Quiz
         </button>
       </div>
     `).join('');
     
   } catch (error) {
     console.error("Error loading courses:", error);
+    
     coursesList.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">
           <i class="fas fa-exclamation-triangle"></i>
         </div>
         <h3 style="margin-bottom: 8px; color: #ff3b30;">Gagal Memuat Course</h3>
-        <p style="color: var(--text-muted); margin-bottom: 16px;">${error.message}</p>
-        <div style="display: flex; gap: 8px; justify-content: center;">
+        <p style="color: var(--text-muted); margin-bottom: 12px;">${error.message}</p>
+        <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px;">
+          Error code: ${error.code || 'N/A'}
+        </p>
+        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
           <button onclick="location.reload()" class="btn secondary">
             <i class="fas fa-redo"></i> Coba Lagi
           </button>
           <a href="index.html" class="btn primary">
-            <i class="fas fa-home"></i> Kembali
+            <i class="fas fa-home"></i> Kembali ke Home
           </a>
         </div>
       </div>
@@ -244,10 +290,14 @@ async function loadCourses() {
   }
 }
 
-// Start Quiz
+// ========== START QUIZ ==========
+
 window.startQuiz = async function(courseId, courseName) {
+  console.log("Starting quiz for course:", courseId, courseName);
+  
   currentCourse = { id: courseId, name: courseName };
   
+  // Update UI
   coursesSection.style.display = 'none';
   quizSection.style.display = 'block';
   pageTitle.textContent = courseName;
@@ -255,22 +305,13 @@ window.startQuiz = async function(courseId, courseName) {
   backBtn.style.display = 'inline-flex';
   
   try {
-    const { firebaseFirestore } = await loadFirebase();
-    const db = firebaseFirestore();
+    // Load questions from Firestore
+    const questionsRef = collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal");
+    const questionsSnapshot = await getDocs(questionsRef);
     
-    const questionsSnapshot = await firebaseFirestore.getDocs(
-      firebaseFirestore.collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal")
-    );
+    console.log("Questions found:", questionsSnapshot.size);
     
-    originalQuestions = questionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      pertanyaan: doc.data().pertanyaan || doc.data().question,
-      pilihan: doc.data().pilihan || doc.data().options,
-      jawaban: doc.data().jawaban || doc.data().correct,
-      explanation: doc.data().explanation
-    }));
-    
-    if (originalQuestions.length === 0) {
+    if (questionsSnapshot.empty) {
       quizContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">
@@ -286,12 +327,31 @@ window.startQuiz = async function(courseId, courseName) {
       return;
     }
     
-    randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
+    // Process questions data
+    originalQuestions = [];
+    questionsSnapshot.forEach(doc => {
+      const data = doc.data();
+      originalQuestions.push({
+        id: doc.id,
+        pertanyaan: data.pertanyaan || data.question || 'Pertanyaan tidak tersedia',
+        pilihan: data.pilihan || data.options || {},
+        jawaban: data.jawaban || data.correct || '',
+        explanation: data.explanation || ''
+      });
+    });
     
+    console.log("Questions loaded:", originalQuestions.length);
+    
+    // Randomize questions
+    randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
+    console.log("Randomized questions:", randomizedQuestions);
+    
+    // Initialize quiz state
     currentQuestionIndex = 0;
     userAnswers = {};
     timer = 0;
     
+    // Start timer
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       timer++;
@@ -300,17 +360,22 @@ window.startQuiz = async function(courseId, courseName) {
       timerDisplay.textContent = `${minutes}:${seconds}`;
     }, 1000);
     
+    // Render first question
     renderQuestion();
     
   } catch (error) {
     console.error("Error loading questions:", error);
+    
     quizContainer.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">
           <i class="fas fa-exclamation-triangle"></i>
         </div>
         <h3 style="margin-bottom: 8px; color: #ff3b30;">Gagal Memuat Soal</h3>
-        <p style="color: var(--text-muted); margin-bottom: 16px;">${error.message}</p>
+        <p style="color: var(--text-muted); margin-bottom: 12px;">${error.message}</p>
+        <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px;">
+          Error code: ${error.code || 'N/A'}
+        </p>
         <button onclick="showCourses()" class="btn primary">
           <i class="fas fa-arrow-left"></i> Kembali
         </button>
@@ -319,27 +384,39 @@ window.startQuiz = async function(courseId, courseName) {
   }
 };
 
-// Render Question
+// ========== RENDER QUESTION ==========
+
 function renderQuestion() {
-  const question = randomizedQuestions[currentQuestionIndex];
-  if (!question) return;
+  if (!randomizedQuestions || randomizedQuestions.length === 0) {
+    console.error("No questions available to render");
+    return;
+  }
   
+  const question = randomizedQuestions[currentQuestionIndex];
+  if (!question) {
+    console.error("Question not found at index:", currentQuestionIndex);
+    return;
+  }
+  
+  // Update progress
   quizProgress.textContent = `Soal ${currentQuestionIndex + 1}/${randomizedQuestions.length}`;
   
+  // Render question and options
   quizContainer.innerHTML = `
     <div class="q-text">
-      <b>${currentQuestionIndex + 1}.</b> ${question.pertanyaan || question.question || 'Pertanyaan tidak tersedia'}
+      <b>${currentQuestionIndex + 1}.</b> ${question.pertanyaan || 'Pertanyaan tidak tersedia'}
     </div>
     <div class="choices">
       ${['A', 'B', 'C', 'D'].map(key => {
-        const optionText = (question.pilihan || question.options || {})[key] || '';
+        const optionText = (question.pilihan || {})[key] || '';
         const isSelected = userAnswers[currentQuestionIndex] === key;
         
         if (!optionText || optionText.trim() === '') return '';
         
         return `
           <div class="choice ${isSelected ? 'selected' : ''}" 
-               onclick="selectAnswer('${key}')">
+               onclick="selectAnswer('${key}')"
+               data-option="${key}">
             <span class="label">${key}.</span>
             <span class="text">${optionText}</span>
             ${isSelected ? '<span style="color: #25D366; margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
@@ -349,18 +426,30 @@ function renderQuestion() {
     </div>
   `;
   
+  // Update button states
   prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
   nextBtn.style.display = currentQuestionIndex < randomizedQuestions.length - 1 ? 'flex' : 'none';
   finishBtn.style.display = currentQuestionIndex === randomizedQuestions.length - 1 ? 'flex' : 'none';
+  
+  // Log for debugging
+  console.log(`Rendered question ${currentQuestionIndex + 1}:`, {
+    question: question.pertanyaan?.substring(0, 50) + '...',
+    options: question.pilihan,
+    userAnswer: userAnswers[currentQuestionIndex]
+  });
 }
 
-// Select Answer
+// ========== SELECT ANSWER ==========
+
 window.selectAnswer = function(answer) {
+  console.log(`Selected answer for question ${currentQuestionIndex + 1}:`, answer);
+  
   userAnswers[currentQuestionIndex] = answer;
   renderQuestion();
 };
 
-// Navigation
+// ========== NAVIGATION ==========
+
 prevBtn.addEventListener('click', () => {
   if (currentQuestionIndex > 0) {
     currentQuestionIndex--;
@@ -375,16 +464,22 @@ nextBtn.addEventListener('click', () => {
   }
 });
 
-finishBtn.addEventListener('click', finishQuiz);
-quitBtn.addEventListener('click', confirmQuit);
+// ========== FINISH QUIZ ==========
 
-// Finish Quiz
 async function finishQuiz() {
+  console.log("Finishing quiz...");
+  
+  // Confirm before finishing
+  const confirmed = confirm("Apakah Anda yakin ingin menyelesaikan quiz?");
+  if (!confirmed) return;
+  
+  // Stop timer
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
   }
   
+  // Calculate score
   let score = 0;
   const results = randomizedQuestions.map((q, index) => {
     const userAnswerKey = userAnswers[index];
@@ -393,109 +488,126 @@ async function finishQuiz() {
     
     if (isCorrect) score++;
     
+    // Get full answer texts
     const userAnswerText = userAnswerKey 
       ? `${userAnswerKey}. ${q.pilihan[userAnswerKey] || 'Tidak ada teks jawaban'}` 
       : 'Tidak dijawab';
     
     const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
     
+    // Get all options
     const allOptions = [];
     for (const [key, value] of Object.entries(q.pilihan || {})) {
-      allOptions.push(`${key}. ${value}`);
+      if (value && value.trim() !== '') {
+        allOptions.push(`${key}. ${value}`);
+      }
     }
     
     return {
-      question: q.pertanyaan || q.question,
+      question: q.pertanyaan || 'Pertanyaan tidak tersedia',
       questionNumber: index + 1,
       userAnswerKey,
       userAnswerText,
       correctAnswerKey,
       correctAnswerText,
       isCorrect,
-      explanation: q.explanation,
+      explanation: q.explanation || '',
       allOptions: allOptions.join(' | ')
     };
   });
   
+  const percentage = Math.round((score / randomizedQuestions.length) * 100);
+  
+  console.log("Quiz results:", {
+    score,
+    total: randomizedQuestions.length,
+    percentage,
+    timeSpent: timer
+  });
+  
+  // Save result to localStorage
   const result = {
     courseName: currentCourse.name,
     courseId: currentCourse.id,
     totalQuestions: randomizedQuestions.length,
     score: score,
-    percentage: Math.round((score / randomizedQuestions.length) * 100),
+    percentage: percentage,
     timeSpent: timer,
     results: results,
     timestamp: new Date().toISOString()
   };
   
   localStorage.setItem('quizResult', JSON.stringify(result));
+  console.log("Result saved to localStorage");
   
-  // Save to Firebase jika online
-  if (isOnline) {
-    try {
-      const { firebaseFirestore } = await loadFirebase();
-      const db = firebaseFirestore();
-      
-      await firebaseFirestore.addDoc(firebaseFirestore.collection(db, "quiz_results"), {
-        courseId: currentCourse.id,
-        courseName: currentCourse.name,
-        score: score,
-        totalQuestions: randomizedQuestions.length,
-        timeSpent: timer,
-        timestamp: firebaseFirestore.serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error saving result:", error);
-      // Simpan di localStorage untuk sync nanti
-      const pendingResults = JSON.parse(localStorage.getItem('pendingResults') || '[]');
-      pendingResults.push(result);
-      localStorage.setItem('pendingResults', JSON.stringify(pendingResults));
-    }
-  } else {
-    // Simpan di localStorage untuk sync nanti
-    const pendingResults = JSON.parse(localStorage.getItem('pendingResults') || '[]');
-    pendingResults.push(result);
-    localStorage.setItem('pendingResults', JSON.stringify(pendingResults));
+  // Save to Firebase
+  try {
+    const resultData = {
+      courseId: currentCourse.id,
+      courseName: currentCourse.name,
+      mataKuliahId: mataKuliahId,
+      score: score,
+      totalQuestions: randomizedQuestions.length,
+      percentage: percentage,
+      timeSpent: timer,
+      timestamp: serverTimestamp(),
+      userId: 'anonymous', // Anda bisa tambahkan auth nanti
+      userAnswers: userAnswers
+    };
+    
+    await addDoc(collection(db, "quiz_results"), resultData);
+    console.log("Result saved to Firebase");
+  } catch (error) {
+    console.error("Error saving result to Firebase:", error);
+    // Tetap lanjutkan meski Firebase error
   }
   
+  // Redirect to result page
   window.location.href = 'result.html';
 }
 
-// Show Courses
+// ========== QUIZ CONTROLS ==========
+
+finishBtn.addEventListener('click', finishQuiz);
+
+quitBtn.addEventListener('click', () => {
+  const confirmed = confirm("Apakah Anda yakin ingin keluar dari quiz? Semua jawaban akan hilang.");
+  if (confirmed) {
+    showCourses();
+  }
+});
+
+// ========== SHOW COURSES ==========
+
 window.showCourses = function() {
+  console.log("Showing courses list");
+  
+  // Stop timer
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
   }
   
+  // Reset quiz state
+  currentQuestionIndex = 0;
+  userAnswers = {};
+  randomizedQuestions = [];
+  timer = 0;
+  timerDisplay.textContent = '00:00';
+  
+  // Update UI
   quizSection.style.display = 'none';
   coursesSection.style.display = 'block';
   pageTitle.textContent = 'Quiz';
   pageSubtitle.textContent = 'Pilih course';
   backBtn.style.display = 'none';
+  
+  // Reload courses
+  loadCourses();
 };
 
-// Confirm Quit
-function confirmQuit() {
-  const modal = document.getElementById('confirmModal');
-  const message = document.getElementById('confirmMessage');
-  const cancelBtn = document.getElementById('confirmCancel');
-  const okBtn = document.getElementById('confirmOk');
-  
-  message.textContent = 'Apakah Anda yakin ingin keluar dari quiz? Semua jawaban akan hilang.';
-  modal.style.display = 'flex';
-  
-  cancelBtn.onclick = () => {
-    modal.style.display = 'none';
-  };
-  
-  okBtn.onclick = () => {
-    modal.style.display = 'none';
-    showCourses();
-  };
-}
+// ========== THEME MANAGEMENT ==========
 
-// Theme Management
 function initTheme() {
   const savedTheme = localStorage.getItem('quiz-theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -525,24 +637,40 @@ function updateThemeIcon() {
     : '<i class="fas fa-moon"></i>';
 }
 
-// Back button
-backBtn.addEventListener('click', showCourses);
+// ========== INITIALIZATION ==========
 
-// Network status
-window.addEventListener('online', () => {
-  isOnline = true;
-});
+// Back button handler
+if (backBtn) {
+  backBtn.addEventListener('click', showCourses);
+}
 
-window.addEventListener('offline', () => {
-  isOnline = false;
-});
-
-// Initialize
+// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("DOM loaded, initializing quiz app...");
+  
+  // Initialize theme
   initTheme();
-  themeToggle.addEventListener('click', toggleTheme);
+  
+  // Theme toggle event
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+  }
+  
+  // Load courses
   loadCourses();
+  
+  // Add debug info to console
+  console.log("Quiz app initialized successfully");
+  console.log("Current URL:", window.location.href);
+  console.log("URL params:", Object.fromEntries(urlParams.entries()));
 });
 
 // Make functions globally available
 window.toggleTheme = toggleTheme;
+window.selectAnswer = selectAnswer;
+window.startQuiz = startQuiz;
+window.showCourses = showCourses;
+window.finishQuiz = finishQuiz;
+
+// Export for testing (optional)
+export { db, mataKuliahId };
