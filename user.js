@@ -1,4 +1,4 @@
-// user.js - REVISI MINIMAL UNTUK URUTAN COURSE SAJA
+// user.js - REVISI UNTUK MOBILE & OFFLINE SUPPORT
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -8,21 +8,39 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// Import Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { 
-  getFirestore, 
-  collection, 
-  getDocs,
-  query,
-  orderBy,
-  addDoc,
-  serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+// Lazy load Firebase
+let firebaseApp, firebaseAuth, firebaseFirestore;
 
-// Initialize
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+async function loadFirebase() {
+  if (typeof firebase === 'undefined') {
+    await Promise.all([
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js")
+    ]);
+  }
+  
+  if (!firebase.apps.length) {
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+  } else {
+    firebaseApp = firebase.apps[0];
+  }
+  
+  firebaseAuth = firebase.auth;
+  firebaseFirestore = firebase.firestore;
+  
+  return { firebaseApp, firebaseAuth, firebaseFirestore };
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
 
 // Get mataKuliahId from URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -36,6 +54,7 @@ let currentQuestionIndex = 0;
 let userAnswers = {};
 let timer = 0;
 let timerInterval = null;
+let isOnline = navigator.onLine;
 
 // DOM Elements
 const pageTitle = document.getElementById('pageTitle');
@@ -54,10 +73,7 @@ const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
 
 // ========== FUNGSI NATURAL SORT ==========
-
-// Fungsi untuk mengurutkan secara natural (1, 2, 3, 10, bukan 1, 10, 2, 3)
 function naturalSort(a, b) {
-  // Ekstrak angka dari string
   const extractNumbers = (str) => {
     const matches = str.match(/\d+/g);
     return matches ? matches.map(Number) : [];
@@ -66,14 +82,12 @@ function naturalSort(a, b) {
   const aNumbers = extractNumbers(a.nama || '');
   const bNumbers = extractNumbers(b.nama || '');
   
-  // Jika ada angka di kedua nama, bandingkan angka pertama
   if (aNumbers.length > 0 && bNumbers.length > 0) {
     if (aNumbers[0] !== bNumbers[0]) {
       return aNumbers[0] - bNumbers[0];
     }
   }
   
-  // Fallback: bandingkan string secara normal
   return (a.nama || '').localeCompare(b.nama || '', undefined, { 
     numeric: true, 
     sensitivity: 'base' 
@@ -81,7 +95,6 @@ function naturalSort(a, b) {
 }
 
 // ========== FUNGSI PENGACAKAN ==========
-
 function shuffleArray(array) {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -94,10 +107,8 @@ function shuffleArray(array) {
 function prepareRandomizedQuiz(questions) {
   if (!questions || questions.length === 0) return [];
   
-  // Acak urutan soal
   const shuffledQuestions = shuffleArray(questions);
   
-  // Untuk setiap soal, acak pilihan jawabannya
   return shuffledQuestions.map(question => {
     const options = question.pilihan || question.options || {};
     const correctAnswer = question.jawaban || question.correct;
@@ -105,12 +116,10 @@ function prepareRandomizedQuiz(questions) {
     const optionsArray = Object.entries(options);
     if (optionsArray.length === 0) return question;
     
-    // Acak urutan pilihan
     const shuffledOptions = shuffleArray(optionsArray);
     let newCorrectAnswer = '';
     const newOptions = {};
     
-    // Rekonstruksi options dengan label baru
     shuffledOptions.forEach(([originalKey, value], idx) => {
       const newKey = String.fromCharCode(65 + idx);
       newOptions[newKey] = value;
@@ -120,7 +129,6 @@ function prepareRandomizedQuiz(questions) {
       }
     });
     
-    // Validasi
     if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
       const correctText = options[correctAnswer];
       Object.entries(newOptions).forEach(([key, value]) => {
@@ -140,7 +148,6 @@ function prepareRandomizedQuiz(questions) {
 }
 
 // ========== FUNGSI UTAMA ==========
-
 // Load Courses dengan natural sorting
 async function loadCourses() {
   if (!mataKuliahId) {
@@ -160,13 +167,21 @@ async function loadCourses() {
   }
   
   try {
-    const coursesSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("nama", "asc")));
+    const { firebaseFirestore } = await loadFirebase();
+    const db = firebaseFirestore();
+    
+    const coursesSnapshot = await firebaseFirestore.getDocs(
+      firebaseFirestore.query(
+        firebaseFirestore.collection(db, "mata_kuliah", mataKuliahId, "courses"),
+        firebaseFirestore.orderBy("nama", "asc")
+      )
+    );
+    
     let courses = coursesSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // **PERBAIKAN DI SINI: Natural sort untuk mengurutkan angka dengan benar**
     courses.sort(naturalSort);
     
     if (courses.length === 0) {
@@ -185,7 +200,6 @@ async function loadCourses() {
       return;
     }
     
-    // **PERBAIKAN: Gunakan index dari array yang sudah di-sort**
     coursesList.innerHTML = courses.map((course, index) => `
       <div class="course-item slide-in" style="animation-delay: ${index * 0.05}s;">
         <div class="left">
@@ -203,7 +217,7 @@ async function loadCourses() {
           </div>
         </div>
         <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama || 'Course'}')">
-          <i class="fas fa-play"></i> Mulai Quiz
+          <i class="fas fa-play"></i> <span class="desktop-only">Mulai Quiz</span>
         </button>
       </div>
     `).join('');
@@ -241,7 +255,13 @@ window.startQuiz = async function(courseId, courseName) {
   backBtn.style.display = 'inline-flex';
   
   try {
-    const questionsSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal")));
+    const { firebaseFirestore } = await loadFirebase();
+    const db = firebaseFirestore();
+    
+    const questionsSnapshot = await firebaseFirestore.getDocs(
+      firebaseFirestore.collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal")
+    );
+    
     originalQuestions = questionsSnapshot.docs.map(doc => ({
       id: doc.id,
       pertanyaan: doc.data().pertanyaan || doc.data().question,
@@ -266,15 +286,12 @@ window.startQuiz = async function(courseId, courseName) {
       return;
     }
     
-    // Acak soal
     randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
     
-    // Initialize quiz
     currentQuestionIndex = 0;
     userAnswers = {};
     timer = 0;
     
-    // Start timer
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       timer++;
@@ -283,7 +300,6 @@ window.startQuiz = async function(courseId, courseName) {
       timerDisplay.textContent = `${minutes}:${seconds}`;
     }, 1000);
     
-    // Render first question
     renderQuestion();
     
   } catch (error) {
@@ -333,7 +349,6 @@ function renderQuestion() {
     </div>
   `;
   
-  // Update button states
   prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
   nextBtn.style.display = currentQuestionIndex < randomizedQuestions.length - 1 ? 'flex' : 'none';
   finishBtn.style.display = currentQuestionIndex === randomizedQuestions.length - 1 ? 'flex' : 'none';
@@ -365,13 +380,11 @@ quitBtn.addEventListener('click', confirmQuit);
 
 // Finish Quiz
 async function finishQuiz() {
-  // Stop timer
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
   }
   
-  // Calculate score
   let score = 0;
   const results = randomizedQuestions.map((q, index) => {
     const userAnswerKey = userAnswers[index];
@@ -380,14 +393,12 @@ async function finishQuiz() {
     
     if (isCorrect) score++;
     
-    // Dapatkan teks jawaban lengkap
     const userAnswerText = userAnswerKey 
       ? `${userAnswerKey}. ${q.pilihan[userAnswerKey] || 'Tidak ada teks jawaban'}` 
       : 'Tidak dijawab';
     
     const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
     
-    // Dapatkan semua pilihan
     const allOptions = [];
     for (const [key, value] of Object.entries(q.pilihan || {})) {
       allOptions.push(`${key}. ${value}`);
@@ -406,7 +417,6 @@ async function finishQuiz() {
     };
   });
   
-  // Save result to localStorage
   const result = {
     courseName: currentCourse.name,
     courseId: currentCourse.id,
@@ -420,21 +430,34 @@ async function finishQuiz() {
   
   localStorage.setItem('quizResult', JSON.stringify(result));
   
-  // Save to Firebase
-  try {
-    await addDoc(collection(db, "quiz_results"), {
-      courseId: currentCourse.id,
-      courseName: currentCourse.name,
-      score: score,
-      totalQuestions: randomizedQuestions.length,
-      timeSpent: timer,
-      timestamp: serverTimestamp()
-    });
-  } catch (error) {
-    console.error("Error saving result:", error);
+  // Save to Firebase jika online
+  if (isOnline) {
+    try {
+      const { firebaseFirestore } = await loadFirebase();
+      const db = firebaseFirestore();
+      
+      await firebaseFirestore.addDoc(firebaseFirestore.collection(db, "quiz_results"), {
+        courseId: currentCourse.id,
+        courseName: currentCourse.name,
+        score: score,
+        totalQuestions: randomizedQuestions.length,
+        timeSpent: timer,
+        timestamp: firebaseFirestore.serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error saving result:", error);
+      // Simpan di localStorage untuk sync nanti
+      const pendingResults = JSON.parse(localStorage.getItem('pendingResults') || '[]');
+      pendingResults.push(result);
+      localStorage.setItem('pendingResults', JSON.stringify(pendingResults));
+    }
+  } else {
+    // Simpan di localStorage untuk sync nanti
+    const pendingResults = JSON.parse(localStorage.getItem('pendingResults') || '[]');
+    pendingResults.push(result);
+    localStorage.setItem('pendingResults', JSON.stringify(pendingResults));
   }
   
-  // Redirect to result page
   window.location.href = 'result.html';
 }
 
@@ -504,6 +527,15 @@ function updateThemeIcon() {
 
 // Back button
 backBtn.addEventListener('click', showCourses);
+
+// Network status
+window.addEventListener('online', () => {
+  isOnline = true;
+});
+
+window.addEventListener('offline', () => {
+  isOnline = false;
+});
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
