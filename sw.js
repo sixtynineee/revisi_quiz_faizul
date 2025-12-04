@@ -1,5 +1,5 @@
-// Service Worker untuk QuizApp
-const CACHE_NAME = 'quizapp-v2';
+// sw.js
+const CACHE_NAME = 'quizapp-v1.0';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -8,58 +8,44 @@ const urlsToCache = [
   '/admin.html',
   '/edit.html',
   '/style.css',
-  '/manifest.json',
+  '/app.js',
+  '/user.js',
+  '/edit.js',
+  '/admin-firebase.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js'
 ];
 
-// Install Service Worker
+// Install a service worker
 self.addEventListener('install', event => {
+  // Perform install steps
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Cache opened');
+        console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
   );
 });
 
-// Fetch Strategy: Cache First, then Network
+// Cache and return requests
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
+        // Cache hit - return response
         if (response) {
           return response;
         }
-        
-        return fetch(event.request).then(
-          response => {
-            if(!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-
-            return response;
-          }
-        ).catch(() => {
-          // Jika offline dan tidak ada di cache
-          if (event.request.url.includes('.html')) {
-            return caches.match('/index.html');
-          }
-        });
-      })
+        return fetch(event.request);
+      }
+    )
   );
 });
 
-// Activate Service Worker
+// Update a service worker
 self.addEventListener('activate', event => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
