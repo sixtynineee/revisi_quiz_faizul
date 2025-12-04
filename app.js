@@ -1,4 +1,4 @@
-// app.js - Home Page Script (User)
+// app.js - Home Page Script (User) - OPTIMIZED FOR MOBILE
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -8,19 +8,39 @@ const firebaseConfig = {
   appId: "1:177544522930:web:354794b407cf29d86cedab"
 };
 
-// Import Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { 
-  getFirestore, 
-  collection, 
-  getDocs,
-  query,
-  orderBy 
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+// Import Firebase dengan lazy loading
+let firebaseApp, firebaseAuth, firebaseFirestore;
 
-// Initialize
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+async function loadFirebase() {
+  if (typeof firebase === 'undefined') {
+    await Promise.all([
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js")
+    ]);
+  }
+  
+  if (!firebase.apps.length) {
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+  } else {
+    firebaseApp = firebase.apps[0];
+  }
+  
+  firebaseAuth = firebase.auth;
+  firebaseFirestore = firebase.firestore;
+  
+  return { firebaseApp, firebaseAuth, firebaseFirestore };
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
 
 // DOM Elements
 const mataKuliahList = document.getElementById('mataKuliahList');
@@ -29,7 +49,11 @@ const themeToggle = document.getElementById('themeToggle');
 const totalCourses = document.getElementById('totalCourses');
 const totalQuestions = document.getElementById('totalQuestions');
 
-// Load Mata Kuliah
+// State untuk offline
+let isOnline = navigator.onLine;
+let cachedData = null;
+
+// Load Mata Kuliah dengan caching
 async function loadMataKuliah() {
   try {
     mataKuliahList.innerHTML = `
@@ -39,13 +63,26 @@ async function loadMataKuliah() {
       </div>
     `;
     
+    // Coba load dari cache dulu
+    if (cachedData && !isOnline) {
+      displayMataKuliah(cachedData);
+      return;
+    }
+    
+    // Load Firebase
+    const { firebaseFirestore } = await loadFirebase();
+    const db = firebaseFirestore();
+    
     // Get mata kuliah
-    const q = query(collection(db, "mata_kuliah"), orderBy("nama", "asc"));
-    const snapshot = await getDocs(q);
+    const q = firebaseFirestore.query(firebaseFirestore.collection(db, "mata_kuliah"), firebaseFirestore.orderBy("nama", "asc"));
+    const snapshot = await firebaseFirestore.getDocs(q);
     const mataKuliah = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Cache data
+    cachedData = mataKuliah;
     
     if (mataKuliah.length === 0) {
       mataKuliahList.innerHTML = `
@@ -69,7 +106,7 @@ async function loadMataKuliah() {
     let totalSoal = 0;
     for (const mk of mataKuliah) {
       try {
-        const coursesSnapshot = await getDocs(collection(db, "mata_kuliah", mk.id, "courses"));
+        const coursesSnapshot = await firebaseFirestore.getDocs(firebaseFirestore.collection(db, "mata_kuliah", mk.id, "courses"));
         for (const courseDoc of coursesSnapshot.docs) {
           totalSoal += courseDoc.data().totalSoal || 0;
         }
@@ -83,30 +120,17 @@ async function loadMataKuliah() {
     totalQuestions.textContent = `${totalSoal} Soal`;
     
     // Render mata kuliah
-    mataKuliahList.innerHTML = mataKuliah.map(mk => `
-      <div class="course-item slide-in" style="animation-delay: ${mataKuliah.indexOf(mk) * 0.1}s;">
-        <div class="left">
-          <div class="course-badge">${mk.nama?.charAt(0) || 'M'}</div>
-          <div>
-            <h3 style="margin-bottom: 4px;">${mk.nama || 'Tanpa Nama'}</h3>
-            <p class="muted">${mk.description || 'Tidak ada deskripsi'}</p>
-            <div style="display: flex; gap: 12px; margin-top: 8px;">
-              <span class="badge">${mk.totalCourses || 0} Course</span>
-              <span class="muted">•</span>
-              <span class="muted" style="font-size: 13px;">
-                <i class="fas fa-clock"></i> ${Math.ceil((mk.totalCourses || 0) * 15)} menit
-              </span>
-            </div>
-          </div>
-        </div>
-        <a href="quiz.html?mataKuliah=${mk.id}" class="btn primary">
-          <i class="fas fa-play"></i> Mulai
-        </a>
-      </div>
-    `).join('');
+    displayMataKuliah(mataKuliah, totalSoal);
     
   } catch (error) {
     console.error("Error loading data:", error);
+    
+    // Fallback ke cache jika ada
+    if (cachedData) {
+      displayMataKuliah(cachedData);
+      return;
+    }
+    
     mataKuliahList.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">
@@ -125,6 +149,33 @@ async function loadMataKuliah() {
       </div>
     `;
   }
+}
+
+function displayMataKuliah(mataKuliah, totalSoal = 0) {
+  totalCourses.textContent = `${mataKuliah.length} Mata Kuliah`;
+  totalQuestions.textContent = `${totalSoal} Soal`;
+  
+  mataKuliahList.innerHTML = mataKuliah.map(mk => `
+    <div class="course-item slide-in" style="animation-delay: ${mataKuliah.indexOf(mk) * 0.1}s;">
+      <div class="left">
+        <div class="course-badge">${mk.nama?.charAt(0) || 'M'}</div>
+        <div>
+          <h3 style="margin-bottom: 4px;">${mk.nama || 'Tanpa Nama'}</h3>
+          <p class="muted">${mk.description || 'Tidak ada deskripsi'}</p>
+          <div style="display: flex; gap: 12px; margin-top: 8px;">
+            <span class="badge">${mk.totalCourses || 0} Course</span>
+            <span class="muted">•</span>
+            <span class="muted" style="font-size: 13px;">
+              <i class="fas fa-clock"></i> ${Math.ceil((mk.totalCourses || 0) * 15)} menit
+            </span>
+          </div>
+        </div>
+      </div>
+      <a href="quiz.html?mataKuliah=${mk.id}" class="btn primary">
+        <i class="fas fa-play"></i> <span class="desktop-only">Mulai</span>
+      </a>
+    </div>
+  `).join('');
 }
 
 // Theme Management
@@ -161,14 +212,29 @@ function updateThemeIcon() {
     : '<i class="fas fa-moon"></i>';
 }
 
+// Network status handling
+function handleNetworkChange() {
+  isOnline = navigator.onLine;
+  if (isOnline) {
+    // Refresh data jika online kembali
+    loadMataKuliah();
+  }
+}
+
 // Event Listeners
 refreshBtn.addEventListener('click', loadMataKuliah);
 themeToggle.addEventListener('click', toggleTheme);
+window.addEventListener('online', handleNetworkChange);
+window.addEventListener('offline', handleNetworkChange);
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
-  loadMataKuliah();
+  
+  // Delay loading Firebase untuk meningkatkan perceived performance
+  setTimeout(() => {
+    loadMataKuliah();
+  }, 100);
 });
 
 // Make functions globally available for onclick handlers
