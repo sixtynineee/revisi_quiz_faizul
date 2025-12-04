@@ -1,26 +1,121 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <!-- WAJIB untuk responsive mobile -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#075E54">
+    <!-- PWA & Mobile Meta Tags -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#075E54" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c1317" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <!-- Touch icon untuk Android -->
+    <meta name="apple-mobile-web-app-title" content="QuizApp">
+    <meta name="application-name" content="QuizApp">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-TileColor" content="#075E54">
+    <meta name="msapplication-tap-highlight" content="no">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+    
+    <!-- Icons -->
     <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/color/192/whatsapp.png">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/whatsapp.png">
-
-    <!-- PWA manifest (opsional) -->
-    <link rel="manifest" href="manifest.json">
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="apple-touch-startup-image" href="https://img.icons8.com/color/512/whatsapp.png">
+    
     <title>QuizApp - Belajar Interaktif</title>
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="mobile-optimized.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Splash Screen CSS -->
+    <style>
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #075E54;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        #splash-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .splash-logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        .splash-logo i {
+            font-size: 40px;
+            color: #25D366;
+        }
+        
+        .splash-text {
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+        
+        .splash-loader {
+            width: 40px;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        
+        .splash-loader::after {
+            content: '';
+            display: block;
+            width: 40px;
+            height: 100%;
+            background: white;
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+    </style>
 </head>
 <body data-theme="light">
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="splash-logo">
+            <i class="fas fa-brain"></i>
+        </div>
+        <div class="splash-text">QuizApp</div>
+        <div class="splash-loader"></div>
+    </div>
+
+    <!-- Network Status -->
+    <div class="network-status" id="networkStatus"></div>
+
     <div class="app">
         <!-- Header -->
         <header class="topbar">
@@ -29,7 +124,10 @@
                 <p class="muted" style="font-size: 12px; margin-top: 2px;">Belajar dengan cara yang menyenangkan</p>
             </div>
             <div class="top-actions">
-                <a href="admin.html" class="btn secondary">
+                <a href="admin.html" class="btn secondary mobile-only">
+                    <i class="fas fa-user-shield"></i>
+                </a>
+                <a href="admin.html" class="btn secondary desktop-only">
                     <i class="fas fa-user-shield"></i> Admin
                 </a>
             </div>
@@ -73,7 +171,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2><i class="fas fa-book-open"></i> Daftar Mata Kuliah</h2>
                     <button id="refreshBtn" class="btn secondary">
-                        <i class="fas fa-redo"></i> Refresh
+                        <i class="fas fa-redo"></i> <span class="desktop-only">Refresh</span>
                     </button>
                 </div>
                 
@@ -85,7 +183,43 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- PWA Install Banner -->
+            <div class="card" id="pwaBanner" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #25D366, #128C7E); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
+                        <i class="fas fa-mobile-alt"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <h4 style="margin-bottom: 4px;">Install Aplikasi</h4>
+                        <p class="muted" style="font-size: 14px;">Install QuizApp untuk pengalaman belajar yang lebih baik</p>
+                    </div>
+                    <button id="installBtn" class="btn primary">
+                        <i class="fas fa-download"></i> Install
+                    </button>
+                </div>
+            </div>
         </main>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav class="mobile-bottom-nav">
+            <a href="index.html" class="nav-item active">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </a>
+            <a href="quiz.html" class="nav-item">
+                <i class="fas fa-play-circle"></i>
+                <span>Quiz</span>
+            </a>
+            <a href="result.html" class="nav-item">
+                <i class="fas fa-chart-bar"></i>
+                <span>Hasil</span>
+            </a>
+            <a href="admin.html" class="nav-item">
+                <i class="fas fa-cog"></i>
+                <span>Admin</span>
+            </a>
+        </nav>
 
         <!-- Footer -->
         <footer class="footer">
@@ -93,8 +227,8 @@
                 <small>© 2025 QuizAppFaizul • Platform Belajar Interaktif</small>
                 <div class="muted" style="display: flex; gap: 16px; align-items: center;">
                     <span id="totalCourses">0 Mata Kuliah</span>
-                    <span>•</span>
-                    <span id="totalQuestions">0 Soal</span>
+                    <span class="desktop-only">•</span>
+                    <span id="totalQuestions" class="desktop-only">0 Soal</span>
                 </div>
             </div>
         </footer>
@@ -105,8 +239,80 @@
         </button>
     </div>
 
+    <!-- Service Worker Registration -->
+    <script>
+        // Hide splash screen
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('splash-screen').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('splash-screen').style.display = 'none';
+                }, 500);
+            }, 1000);
+        });
+        
+        // Network status
+        function updateNetworkStatus() {
+            const statusElement = document.getElementById('networkStatus');
+            if (navigator.onLine) {
+                statusElement.textContent = 'Anda online';
+                statusElement.className = 'network-status online';
+                setTimeout(() => {
+                    statusElement.style.transform = 'translateY(-100%)';
+                }, 3000);
+            } else {
+                statusElement.textContent = 'Anda offline - Beberapa fitur terbatas';
+                statusElement.className = 'network-status offline';
+            }
+        }
+        
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
+        
+        // PWA Install
+        let deferredPrompt;
+        const pwaBanner = document.getElementById('pwaBanner');
+        const installBtn = document.getElementById('installBtn');
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            pwaBanner.style.display = 'block';
+            
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPrompt) return;
+                
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                
+                if (outcome === 'accepted') {
+                    pwaBanner.style.display = 'none';
+                }
+                
+                deferredPrompt = null;
+            });
+        });
+        
+        window.addEventListener('appinstalled', () => {
+            pwaBanner.style.display = 'none';
+        });
+        
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+
     <script type="module" src="app.js"></script>
+    <script src="install.js" defer></script>
 </body>
 </html>
-
-
