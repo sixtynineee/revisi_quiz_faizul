@@ -1121,3 +1121,172 @@ body {
 .tag i {
   font-size: 10px;
 }
+
+/* ========================= */
+/* MOBILE-FIRST RESPONSIVE   */
+/* ========================= */
+
+/* Untuk layar sangat kecil (phone portrait) */
+@media (max-width: 360px) {
+  :root {
+    --spacing-lg: 12px;
+    --spacing-md: 8px;
+    --spacing-sm: 4px;
+    --radius-md: 10px;
+  }
+  
+  .container {
+    padding: 8px;
+  }
+  
+  .btn {
+    padding: 10px 14px;
+    font-size: 13px;
+    min-height: 42px;
+  }
+  
+  .course-badge {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+  
+  .choice {
+    padding: 12px;
+    min-height: 56px;
+  }
+  
+  .q-text {
+    padding: 12px;
+    font-size: 15px;
+  }
+}
+
+/* Phone landscape / tablet kecil */
+@media (min-width: 361px) and (max-width: 480px) {
+  .container {
+    padding: 12px;
+  }
+  
+  .card {
+    padding: 16px;
+  }
+}
+
+/* Tablet portrait */
+@media (min-width: 481px) and (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+  
+  .category-courses {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablet landscape / desktop kecil */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .category-courses {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Desktop */
+@media (min-width: 1025px) {
+  .category-courses {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Touch-friendly improvements untuk mobile */
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: 48px; /* Lebih besar untuk sentuhan jari */
+  }
+  
+  .choice {
+    min-height: 60px;
+    padding: 16px;
+  }
+  
+  .course-item {
+    padding: 16px;
+    min-height: 80px;
+  }
+  
+  /* Hilangkan hover effects di mobile */
+  .choice:hover {
+    transform: none;
+  }
+  
+  .course-item:hover {
+    transform: none;
+  }
+}
+
+/* Landscape mode fix */
+@media (orientation: landscape) and (max-height: 500px) {
+  .container {
+    padding: 8px;
+  }
+  
+  .quiz-header {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+  }
+  
+  .q-text {
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+  
+  .choices {
+    gap: 6px;
+  }
+  
+  .choice {
+    min-height: 48px;
+    padding: 10px;
+  }
+}
+
+/* High DPI screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .choice, .btn, .course-item {
+    border-width: 1.5px;
+  }
+}
+
+/* Dark mode untuk mobile */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #0c1317;
+    --bg-secondary: #111b21;
+    --text-primary: #e9edef;
+  }
+}
+
+/* Safe area untuk iPhone X dan above */
+@supports (padding: max(0px)) {
+  .container, .topbar {
+    padding-left: max(var(--spacing-lg), env(safe-area-inset-left));
+    padding-right: max(var(--spacing-lg), env(safe-area-inset-right));
+  }
+  
+  .topbar {
+    padding-top: max(var(--spacing-sm), env(safe-area-inset-top));
+  }
+}
+
+/* Loading indicator mobile optimization */
+@media (max-width: 768px) {
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border-width: 3px;
+  }
+  
+  .loading-indicator p {
+    font-size: 14px;
+  }
+}
