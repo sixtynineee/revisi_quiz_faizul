@@ -1,9 +1,56 @@
-// edit.js - Admin Dashboard CRUD Operations
+// edit.js - Admin Dashboard CRUD Operations dengan Natural Sorting
 import { 
   auth, db, signOut, 
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc, 
   query, orderBy, Timestamp, increment 
 } from './admin-firebase.js';
+
+// ========== FUNGSI NATURAL SORTING ==========
+
+// Fungsi untuk mengekstrak angka dari nama
+function extractNumberFromName(name) {
+  if (!name) return 0;
+  
+  // Cari angka di akhir string
+  const match = name.match(/(\d+)$/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  
+  // Jika tidak ada angka di akhir, cari angka di mana saja
+  const anyNumberMatch = name.match(/\d+/);
+  if (anyNumberMatch) {
+    return parseInt(anyNumberMatch[0], 10);
+  }
+  
+  return 0; // Default jika tidak ada angka
+}
+
+// Natural sort function untuk mengurutkan dengan benar
+function naturalSort(array, field = 'nama') {
+  if (!array || array.length === 0) return array;
+  
+  return [...array].sort((a, b) => {
+    const nameA = (a[field] || '').toString();
+    const nameB = (b[field] || '').toString();
+    
+    // Extract numbers from names
+    const numA = extractNumberFromName(nameA);
+    const numB = extractNumberFromName(nameB);
+    
+    // Jika kedua nama memiliki angka, urutkan berdasarkan angka
+    if (numA !== 0 && numB !== 0) {
+      return numA - numB;
+    }
+    
+    // Jika hanya satu yang punya angka, yang punya angka duluan
+    if (numA !== 0 && numB === 0) return -1;
+    if (numA === 0 && numB !== 0) return 1;
+    
+    // Jika tidak ada angka di kedua nama, urutkan alfabet biasa
+    return nameA.localeCompare(nameB, 'id', { numeric: true });
+  });
+}
 
 // State
 let currentView = 'mata-kuliah';
@@ -184,12 +231,17 @@ async function updateGlobalStats() {
 
 async function loadMataKuliah() {
   try {
-    const q = query(collection(db, "mata_kuliah"), orderBy("nama", "asc"));
+    const q = query(collection(db, "mata_kuliah"));
     const snapshot = await getDocs(q);
-    mataKuliahList = snapshot.docs.map(doc => ({
+    
+    // Konversi ke array
+    let mataKuliahData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // TERAPKAN NATURAL SORTING pada mata kuliah
+    mataKuliahList = naturalSort(mataKuliahData, 'nama');
     
     if (mataKuliahList.length === 0) {
       adminContent.innerHTML = `
@@ -379,13 +431,16 @@ window.deleteMataKuliah = async function(mkId) {
 async function loadCoursesView() {
   try {
     // First load mata kuliah for selection
-    const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah"), orderBy("nama", "asc")));
+    const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah")));
     const mataKuliah = mkSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    if (mataKuliah.length === 0) {
+    // TERAPKAN NATURAL SORTING pada mata kuliah
+    const sortedMataKuliah = naturalSort(mataKuliah, 'nama');
+    
+    if (sortedMataKuliah.length === 0) {
       adminContent.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">
@@ -406,7 +461,7 @@ async function loadCoursesView() {
         <label>Pilih Mata Kuliah</label>
         <select id="mkSelect" style="width: 300px;">
           <option value="">-- Pilih Mata Kuliah --</option>
-          ${mataKuliah.map(mk => `
+          ${sortedMataKuliah.map(mk => `
             <option value="${mk.id}">${mk.nama}</option>
           `).join('')}
         </select>
@@ -424,7 +479,7 @@ async function loadCoursesView() {
     mkSelect.addEventListener('change', async (e) => {
       const mkId = e.target.value;
       if (mkId) {
-        currentMataKuliah = mataKuliah.find(mk => mk.id === mkId);
+        currentMataKuliah = sortedMataKuliah.find(mk => mk.id === mkId);
         await loadCourses(mkId);
       }
     });
@@ -454,12 +509,18 @@ async function loadCoursesView() {
 
 async function loadCourses(mataKuliahId) {
   try {
-    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("nama", "asc"));
+    // Ambil data dari Firestore
+    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"));
     const snapshot = await getDocs(q);
-    coursesList = snapshot.docs.map(doc => ({
+    
+    // Konversi ke array
+    let coursesData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // TERAPKAN NATURAL SORTING
+    coursesList = naturalSort(coursesData, 'nama');
     
     const coursesContainer = document.getElementById('coursesContainer');
     
@@ -656,13 +717,16 @@ window.deleteCourse = async function(courseId) {
 async function loadSoalView() {
   try {
     // First load mata kuliah for selection
-    const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah"), orderBy("nama", "asc")));
+    const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah")));
     const mataKuliah = mkSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    if (mataKuliah.length === 0) {
+    // TERAPKAN NATURAL SORTING pada mata kuliah
+    const sortedMataKuliah = naturalSort(mataKuliah, 'nama');
+    
+    if (sortedMataKuliah.length === 0) {
       adminContent.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">
@@ -684,10 +748,10 @@ async function loadSoalView() {
           <label>Pilih Mata Kuliah</label>
           <select id="mkSelectSoal">
             <option value="">-- Pilih Mata Kuliah --</option>
-            ${mataKuliah.map(mk => `
+            ${sortedMataKuliah.map(mk => `
               <option value="${mk.id}">${mk.nama}</option>
             `).join('')}
-          </select>
+        </select>
         </div>
         
         <div class="form-group" style="flex: 1;">
@@ -715,7 +779,7 @@ async function loadSoalView() {
       courseSelect.innerHTML = '<option value="">-- Pilih Course --</option>';
       
       if (mkId) {
-        currentMataKuliah = mataKuliah.find(mk => mk.id === mkId);
+        currentMataKuliah = sortedMataKuliah.find(mk => mk.id === mkId);
         await loadCoursesForSoal(mkId);
       }
     });
@@ -753,12 +817,17 @@ async function loadSoalView() {
 
 async function loadCoursesForSoal(mataKuliahId) {
   try {
-    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("nama", "asc"));
+    const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"));
     const snapshot = await getDocs(q);
-    coursesList = snapshot.docs.map(doc => ({
+    
+    // Konversi ke array
+    let coursesData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // TERAPKAN NATURAL SORTING
+    coursesList = naturalSort(coursesData, 'nama');
     
     const courseSelect = document.getElementById('courseSelectSoal');
     courseSelect.innerHTML = '<option value="">-- Pilih Course --</option>' +
