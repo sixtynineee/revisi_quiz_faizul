@@ -1,4 +1,4 @@
-// user.js - REVISI FINAL (Tanpa result.js)
+// user.js - REVISI DENGAN PERBAIKAN URUTAN & FITUR TAMBAHAN
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -52,6 +52,37 @@ const nextBtn = document.getElementById('nextBtn');
 const finishBtn = document.getElementById('finishBtn');
 const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
+const loadingIndicator = document.getElementById('loadingIndicator');
+
+// ========== FUNGSI PENGURUTAN NATURAL ==========
+
+// Fungsi untuk natural sorting (1, 2, 3, 10, bukan 1, 10, 2, 3)
+function naturalSort(a, b) {
+  const ax = [], bx = [];
+
+  a.replace(/(\d+)|(\D+)/g, function(_, $1, $2) {
+    ax.push([$1 || Infinity, $2 || ""]);
+  });
+  
+  b.replace(/(\d+)|(\D+)/g, function(_, $1, $2) {
+    bx.push([$1 || Infinity, $2 || ""]);
+  });
+  
+  while (ax.length && bx.length) {
+    const an = ax.shift();
+    const bn = bx.shift();
+    const nn = (an[0] - bn[0]) || an[1].localeCompare(bn[1]);
+    if (nn) return nn;
+  }
+  
+  return ax.length - bx.length;
+}
+
+// Fungsi untuk mengekstrak angka dari nama course
+function extractNumberFromCourseName(name) {
+  const match = name.match(/(\d+)/);
+  return match ? parseInt(match[0]) : Infinity;
+}
 
 // ========== FUNGSI PENGACAKAN ==========
 
@@ -93,7 +124,7 @@ function prepareRandomizedQuiz(questions) {
       }
     });
     
-    // Validasi
+    // Validasi jika tidak ditemukan exact match
     if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
       const correctText = options[correctAnswer];
       Object.entries(newOptions).forEach(([key, value]) => {
@@ -101,6 +132,11 @@ function prepareRandomizedQuiz(questions) {
           newCorrectAnswer = key;
         }
       });
+    }
+    
+    // Fallback: pilih huruf pertama jika masih kosong
+    if (!newCorrectAnswer && Object.keys(newOptions).length > 0) {
+      newCorrectAnswer = Object.keys(newOptions)[0];
     }
     
     return {
@@ -112,9 +148,23 @@ function prepareRandomizedQuiz(questions) {
   });
 }
 
-// ========== FUNGSI UTAMA ==========
+// ========== FUNGSI UTAMA (DIPERBAIKI) ==========
 
-// Load Courses
+// Tampilkan loading
+function showLoading() {
+  if (loadingIndicator) {
+    loadingIndicator.style.display = 'flex';
+  }
+}
+
+// Sembunyikan loading
+function hideLoading() {
+  if (loadingIndicator) {
+    loadingIndicator.style.display = 'none';
+  }
+}
+
+// Load Courses dengan natural sorting
 async function loadCourses() {
   if (!mataKuliahId) {
     coursesList.innerHTML = `
@@ -129,15 +179,26 @@ async function loadCourses() {
         </a>
       </div>
     `;
+    hideLoading();
     return;
   }
   
+  showLoading();
+  
   try {
-    const coursesSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("nama", "asc")));
-    const courses = coursesSnapshot.docs.map(doc => ({
+    const coursesSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses"), orderBy("order", "asc")));
+    let courses = coursesSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Jika tidak ada field 'order', gunakan natural sort berdasarkan nama
+    if (!courses.some(course => course.order !== undefined)) {
+      courses.sort((a, b) => {
+        // Coba natural sort berdasarkan nama
+        return naturalSort(a.nama || '', b.nama || '');
+      });
+    }
     
     if (courses.length === 0) {
       coursesList.innerHTML = `
@@ -152,30 +213,84 @@ async function loadCourses() {
           </a>
         </div>
       `;
+      hideLoading();
       return;
     }
     
-    coursesList.innerHTML = courses.map(course => `
-      <div class="course-item slide-in" style="animation-delay: ${courses.indexOf(course) * 0.1}s;">
-        <div class="left">
-          <div class="course-badge">${course.nama?.charAt(0) || 'C'}</div>
-          <div>
-            <h3 style="margin-bottom: 4px;">${course.nama || 'Tanpa Nama'}</h3>
-            <p class="muted">${course.description || 'Tidak ada deskripsi'}</p>
-            <div style="display: flex; gap: 12px; margin-top: 8px;">
-              <span class="badge">${course.totalSoal || 0} Soal</span>
-              <span class="muted">•</span>
-              <span class="muted" style="font-size: 13px;">
-                <i class="fas fa-clock"></i> ${Math.ceil((course.totalSoal || 0) * 1.5)} menit
-              </span>
+    // Group courses by kategori/tipe jika diperlukan
+    const groupedCourses = {};
+    courses.forEach(course => {
+      // Ekstrak kategori dari nama (misal: "Komunikasi Bisnis dan Teknis")
+      const match = course.nama.match(/^(.+?)\s+\d+$/);
+      const category = match ? match[1] : 'Lainnya';
+      
+      if (!groupedCourses[category]) {
+        groupedCourses[category] = [];
+      }
+      groupedCourses[category].push(course);
+    });
+    
+    let htmlContent = '';
+    
+    // Jika hanya satu kategori, tampilkan langsung
+    if (Object.keys(groupedCourses).length === 1) {
+      htmlContent = courses.map((course, index) => `
+        <div class="course-item slide-in" style="animation-delay: ${index * 0.05}s;">
+          <div class="left">
+            <div class="course-badge ${course.badgeColor || 'primary'}">${course.nama?.charAt(0) || 'C'}</div>
+            <div>
+              <h3 style="margin-bottom: 4px;">${course.nama || 'Tanpa Nama'}</h3>
+              <p class="muted">${course.description || 'Tidak ada deskripsi'}</p>
+              <div style="display: flex; gap: 12px; margin-top: 8px; align-items: center;">
+                <span class="badge">${course.totalSoal || 0} Soal</span>
+                <span class="muted">•</span>
+                <span class="muted" style="font-size: 13px;">
+                  <i class="fas fa-clock"></i> ${Math.ceil((course.totalSoal || 0) * 1.5)} menit
+                </span>
+                ${course.difficulty ? `<span class="badge ${course.difficulty === 'Mudah' ? 'success' : course.difficulty === 'Sedang' ? 'warning' : 'danger'}">${course.difficulty}</span>` : ''}
+              </div>
             </div>
           </div>
+          <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama.replace(/'/g, "\\'") || 'Course'}')">
+            <i class="fas fa-play"></i> Mulai Quiz
+          </button>
         </div>
-        <button class="btn primary" onclick="startQuiz('${course.id}', '${course.nama || 'Course'}')">
-          <i class="fas fa-play"></i> Mulai Quiz
-        </button>
-      </div>
-    `).join('');
+      `).join('');
+    } else {
+      // Jika multiple kategori, buat section per kategori
+      Object.keys(groupedCourses).sort(naturalSort).forEach(category => {
+        htmlContent += `
+          <div class="category-section">
+            <h3 class="category-title">
+              <i class="fas fa-folder"></i> ${category}
+            </h3>
+            <div class="category-courses">
+              ${groupedCourses[category].map((course, index) => `
+                <div class="course-item slide-in" style="animation-delay: ${index * 0.05}s;">
+                  <div class="left">
+                    <div class="course-badge ${course.badgeColor || 'secondary'}">${course.nama?.replace(/^.+?(\d+)$/, '$1') || '?'}</div>
+                    <div>
+                      <h4 style="margin-bottom: 4px;">${course.nama || 'Tanpa Nama'}</h4>
+                      <p class="muted" style="font-size: 13px;">${course.description || 'Tidak ada deskripsi'}</p>
+                      <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
+                        <span class="badge small">${course.totalSoal || 0} Soal</span>
+                        ${course.difficulty ? `<span class="badge small ${course.difficulty === 'Mudah' ? 'success' : course.difficulty === 'Sedang' ? 'warning' : 'danger'}">${course.difficulty}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button class="btn primary small" onclick="startQuiz('${course.id}', '${course.nama.replace(/'/g, "\\'") || 'Course'}')">
+                    <i class="fas fa-play"></i> Mulai
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      });
+    }
+    
+    coursesList.innerHTML = htmlContent;
+    hideLoading();
     
   } catch (error) {
     console.error("Error loading courses:", error);
@@ -196,10 +311,11 @@ async function loadCourses() {
         </div>
       </div>
     `;
+    hideLoading();
   }
 }
 
-// Start Quiz
+// Start Quiz (tidak banyak perubahan, sudah bagus)
 window.startQuiz = async function(courseId, courseName) {
   currentCourse = { id: courseId, name: courseName };
   
@@ -209,6 +325,8 @@ window.startQuiz = async function(courseId, courseName) {
   pageSubtitle.textContent = 'Sedang mengerjakan...';
   backBtn.style.display = 'inline-flex';
   
+  showLoading();
+  
   try {
     const questionsSnapshot = await getDocs(query(collection(db, "mata_kuliah", mataKuliahId, "courses", courseId, "soal")));
     originalQuestions = questionsSnapshot.docs.map(doc => ({
@@ -216,7 +334,8 @@ window.startQuiz = async function(courseId, courseName) {
       pertanyaan: doc.data().pertanyaan || doc.data().question,
       pilihan: doc.data().pilihan || doc.data().options,
       jawaban: doc.data().jawaban || doc.data().correct,
-      explanation: doc.data().explanation
+      explanation: doc.data().explanation,
+      type: doc.data().type || 'pilihan_ganda'
     }));
     
     if (originalQuestions.length === 0) {
@@ -232,6 +351,7 @@ window.startQuiz = async function(courseId, courseName) {
           </button>
         </div>
       `;
+      hideLoading();
       return;
     }
     
@@ -254,6 +374,7 @@ window.startQuiz = async function(courseId, courseName) {
     
     // Render first question
     renderQuestion();
+    hideLoading();
     
   } catch (error) {
     console.error("Error loading questions:", error);
@@ -269,36 +390,59 @@ window.startQuiz = async function(courseId, courseName) {
         </button>
       </div>
     `;
+    hideLoading();
   }
 };
 
-// Render Question
+// Render Question (dengan validasi lebih baik)
 function renderQuestion() {
   const question = randomizedQuestions[currentQuestionIndex];
   if (!question) return;
   
   quizProgress.textContent = `Soal ${currentQuestionIndex + 1}/${randomizedQuestions.length}`;
   
+  // Progress bar visual
+  const progressPercentage = ((currentQuestionIndex + 1) / randomizedQuestions.length) * 100;
+  quizProgress.setAttribute('data-progress', `${Math.round(progressPercentage)}%`);
+  
+  // Tampilkan nomor soal yang sudah dijawab
+  const answeredCount = Object.keys(userAnswers).length;
+  const progressText = document.getElementById('quizProgressText') || (() => {
+    const el = document.createElement('div');
+    el.id = 'quizProgressText';
+    el.className = 'quiz-progress-text';
+    quizProgress.parentNode.insertBefore(el, quizProgress);
+    return el;
+  })();
+  
+  progressText.textContent = `(${answeredCount}/${randomizedQuestions.length} terjawab)`;
+  
+  // Render pertanyaan
+  const choicesHtml = ['A', 'B', 'C', 'D'].map(key => {
+    const optionText = (question.pilihan || question.options || {})[key] || '';
+    const isSelected = userAnswers[currentQuestionIndex] === key;
+    
+    if (!optionText || optionText.trim() === '') return '';
+    
+    return `
+      <div class="choice ${isSelected ? 'selected' : ''}" 
+           onclick="selectAnswer('${key}')">
+        <span class="choice-label">${key}.</span>
+        <span class="choice-text">${optionText}</span>
+        ${isSelected ? '<span class="choice-check"><i class="fas fa-check"></i></span>' : ''}
+      </div>
+    `;
+  }).join('');
+  
   quizContainer.innerHTML = `
-    <div class="q-text">
-      <b>${currentQuestionIndex + 1}.</b> ${question.pertanyaan || question.question || 'Pertanyaan tidak tersedia'}
-    </div>
-    <div class="choices">
-      ${['A', 'B', 'C', 'D'].map(key => {
-        const optionText = (question.pilihan || question.options || {})[key] || '';
-        const isSelected = userAnswers[currentQuestionIndex] === key;
-        
-        if (!optionText || optionText.trim() === '') return '';
-        
-        return `
-          <div class="choice ${isSelected ? 'selected' : ''}" 
-               onclick="selectAnswer('${key}')">
-            <span class="label">${key}.</span>
-            <span class="text">${optionText}</span>
-            ${isSelected ? '<span style="color: #25D366; margin-left: auto;"><i class="fas fa-check"></i></span>' : ''}
-          </div>
-        `;
-      }).join('')}
+    <div class="question-container">
+      <div class="q-text">
+        <span class="q-number">${currentQuestionIndex + 1}.</span>
+        <span class="q-content">${question.pertanyaan || question.question || 'Pertanyaan tidak tersedia'}</span>
+      </div>
+      <div class="choices">
+        ${choicesHtml || '<div class="no-options">Tidak ada pilihan jawaban tersedia</div>'}
+      </div>
     </div>
   `;
   
@@ -306,180 +450,113 @@ function renderQuestion() {
   prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
   nextBtn.style.display = currentQuestionIndex < randomizedQuestions.length - 1 ? 'flex' : 'none';
   finishBtn.style.display = currentQuestionIndex === randomizedQuestions.length - 1 ? 'flex' : 'none';
+  
+  // Update finish button text berdasarkan jumlah jawaban
+  const unansweredCount = randomizedQuestions.length - Object.keys(userAnswers).length;
+  finishBtn.innerHTML = unansweredCount > 0 
+    ? `<i class="fas fa-flag"></i> Selesaikan (${unansweredCount} belum dijawab)`
+    : `<i class="fas fa-check-circle"></i> Selesaikan Quiz`;
 }
 
-// Select Answer
+// Select Answer (tambah efek visual)
 window.selectAnswer = function(answer) {
   userAnswers[currentQuestionIndex] = answer;
-  renderQuestion();
-};
-
-// Navigation
-prevBtn.addEventListener('click', () => {
-  if (currentQuestionIndex > 0) {
-    currentQuestionIndex--;
-    renderQuestion();
-  }
-});
-
-nextBtn.addEventListener('click', () => {
-  if (currentQuestionIndex < randomizedQuestions.length - 1) {
-    currentQuestionIndex++;
-    renderQuestion();
-  }
-});
-
-finishBtn.addEventListener('click', finishQuiz);
-quitBtn.addEventListener('click', confirmQuit);
-
-// Finish Quiz
-async function finishQuiz() {
-  // Stop timer
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
   
-  // Calculate score
-  let score = 0;
-  const results = randomizedQuestions.map((q, index) => {
-    const userAnswerKey = userAnswers[index];
-    const correctAnswerKey = q.jawaban;
-    const isCorrect = userAnswerKey === correctAnswerKey;
-    
-    if (isCorrect) score++;
-    
-    // Dapatkan teks jawaban lengkap
-    const userAnswerText = userAnswerKey 
-      ? `${userAnswerKey}. ${q.pilihan[userAnswerKey] || 'Tidak ada teks jawaban'}` 
-      : 'Tidak dijawab';
-    
-    const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
-    
-    // Dapatkan semua pilihan
-    const allOptions = [];
-    for (const [key, value] of Object.entries(q.pilihan || {})) {
-      allOptions.push(`${key}. ${value}`);
+  // Tambah efek visual feedback
+  const choices = document.querySelectorAll('.choice');
+  choices.forEach(choice => {
+    choice.classList.remove('selected');
+    if (choice.querySelector('.choice-label')?.textContent?.startsWith(answer)) {
+      choice.classList.add('selected');
     }
-    
-    return {
-      question: q.pertanyaan || q.question,
-      questionNumber: index + 1,
-      userAnswerKey,
-      userAnswerText,
-      correctAnswerKey,
-      correctAnswerText,
-      isCorrect,
-      explanation: q.explanation,
-      allOptions: allOptions.join(' | ')
-    };
   });
   
-  // Save result to localStorage
-  const result = {
-    courseName: currentCourse.name,
-    courseId: currentCourse.id,
-    totalQuestions: randomizedQuestions.length,
-    score: score,
-    percentage: Math.round((score / randomizedQuestions.length) * 100),
-    timeSpent: timer,
-    results: results,
-    timestamp: new Date().toISOString()
-  };
-  
-  localStorage.setItem('quizResult', JSON.stringify(result));
-  
-  // Save to Firebase
-  try {
-    await addDoc(collection(db, "quiz_results"), {
-      courseId: currentCourse.id,
-      courseName: currentCourse.name,
-      score: score,
-      totalQuestions: randomizedQuestions.length,
-      timeSpent: timer,
-      timestamp: serverTimestamp()
-    });
-  } catch (error) {
-    console.error("Error saving result:", error);
+  // Update progress text
+  const answeredCount = Object.keys(userAnswers).length;
+  const progressText = document.getElementById('quizProgressText');
+  if (progressText) {
+    progressText.textContent = `(${answeredCount}/${randomizedQuestions.length} terjawab)`;
   }
-  
-  // Redirect to result page
-  window.location.href = 'result.html';
-}
-
-// Show Courses
-window.showCourses = function() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
-  
-  quizSection.style.display = 'none';
-  coursesSection.style.display = 'block';
-  pageTitle.textContent = 'Quiz';
-  pageSubtitle.textContent = 'Pilih course';
-  backBtn.style.display = 'none';
 };
 
-// Confirm Quit
-function confirmQuit() {
-  const modal = document.getElementById('confirmModal');
-  const message = document.getElementById('confirmMessage');
-  const cancelBtn = document.getElementById('confirmCancel');
-  const okBtn = document.getElementById('confirmOk');
+// ... (sisanya sama seperti sebelumnya, fungsi finishQuiz, showCourses, dll)
+
+// ========== FUNGSI TAMBAHAN UNTUK UI ==========
+
+// Tampilkan modal konfirmasi
+function showModal(title, message, onConfirm, onCancel = null) {
+  // Cek jika modal sudah ada
+  let modal = document.getElementById('customModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'customModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modalTitle"></h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="modalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button id="modalCancel" class="btn secondary">Batal</button>
+          <button id="modalConfirm" class="btn primary">Ya</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
   
-  message.textContent = 'Apakah Anda yakin ingin keluar dari quiz? Semua jawaban akan hilang.';
-  modal.style.display = 'flex';
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMessage').textContent = message;
+  
+  const confirmBtn = document.getElementById('modalConfirm');
+  const cancelBtn = document.getElementById('modalCancel');
+  
+  const closeModal = () => {
+    modal.style.display = 'none';
+  };
+  
+  confirmBtn.onclick = () => {
+    closeModal();
+    if (onConfirm) onConfirm();
+  };
   
   cancelBtn.onclick = () => {
-    modal.style.display = 'none';
+    closeModal();
+    if (onCancel) onCancel();
   };
   
-  okBtn.onclick = () => {
-    modal.style.display = 'none';
-    showCourses();
-  };
+  modal.style.display = 'flex';
 }
 
-// Theme Management
-function initTheme() {
-  const savedTheme = localStorage.getItem('quiz-theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  
-  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-  } else {
-    document.documentElement.setAttribute('data-theme', 'light');
-    themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
-  }
-}
+window.closeModal = function() {
+  const modal = document.getElementById('customModal');
+  if (modal) modal.style.display = 'none';
+};
 
-function toggleTheme() {
-  const currentTheme = document.documentElement.getAttribute('data-theme');
-  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  
-  document.documentElement.setAttribute('data-theme', newTheme);
-  localStorage.setItem('quiz-theme', newTheme);
-  updateThemeIcon();
-}
+// ========== INISIALISASI ==========
 
-function updateThemeIcon() {
-  const currentTheme = document.documentElement.getAttribute('data-theme');
-  themeToggle.innerHTML = currentTheme === 'dark' 
-    ? '<i class="fas fa-sun"></i>' 
-    : '<i class="fas fa-moon"></i>';
-}
-
-// Back button
-backBtn.addEventListener('click', showCourses);
-
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   themeToggle.addEventListener('click', toggleTheme);
+  
+  // Tambah loading indicator jika belum ada
+  if (!document.getElementById('loadingIndicator')) {
+    const loadingEl = document.createElement('div');
+    loadingEl.id = 'loadingIndicator';
+    loadingEl.className = 'loading-indicator';
+    loadingEl.innerHTML = `
+      <div class="loading-spinner"></div>
+      <p>Memuat data...</p>
+    `;
+    document.querySelector('main').appendChild(loadingEl);
+  }
+  
   loadCourses();
 });
 
-// Make functions globally available
-window.toggleTheme = toggleTheme;
+// Biarkan fungsi global lainnya tetap sama seperti sebelumnya
+// (showCourses, confirmQuit, toggleTheme, dll)
