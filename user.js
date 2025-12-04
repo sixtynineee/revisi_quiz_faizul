@@ -1,4 +1,4 @@
-// user.js - REVISI DENGAN PERBAIKAN URUTAN & FITUR TAMBAHAN
+// user.js - REVISI KOMPLIT DENGAN SEMUA FUNGSI
 const firebaseConfig = {
   apiKey: "AIzaSyDdTjMnaetKZ9g0Xsh9sR3H0Otm_nFyy8o",
   authDomain: "quizappfaizul.firebaseapp.com",
@@ -52,11 +52,42 @@ const nextBtn = document.getElementById('nextBtn');
 const finishBtn = document.getElementById('finishBtn');
 const quitBtn = document.getElementById('quitBtn');
 const themeToggle = document.getElementById('themeToggle');
-const loadingIndicator = document.getElementById('loadingIndicator');
+
+// ========== THEME MANAGEMENT ==========
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('quiz-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  
+  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateThemeIcon();
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    updateThemeIcon();
+  }
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('quiz-theme', newTheme);
+  updateThemeIcon();
+}
+
+function updateThemeIcon() {
+  if (!themeToggle) return;
+  
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  themeToggle.innerHTML = currentTheme === 'dark' 
+    ? '<i class="fas fa-sun"></i>' 
+    : '<i class="fas fa-moon"></i>';
+}
 
 // ========== FUNGSI PENGURUTAN NATURAL ==========
 
-// Fungsi untuk natural sorting (1, 2, 3, 10, bukan 1, 10, 2, 3)
 function naturalSort(a, b) {
   const ax = [], bx = [];
 
@@ -78,12 +109,6 @@ function naturalSort(a, b) {
   return ax.length - bx.length;
 }
 
-// Fungsi untuk mengekstrak angka dari nama course
-function extractNumberFromCourseName(name) {
-  const match = name.match(/(\d+)/);
-  return match ? parseInt(match[0]) : Infinity;
-}
-
 // ========== FUNGSI PENGACAKAN ==========
 
 function shuffleArray(array) {
@@ -98,10 +123,8 @@ function shuffleArray(array) {
 function prepareRandomizedQuiz(questions) {
   if (!questions || questions.length === 0) return [];
   
-  // Acak urutan soal
   const shuffledQuestions = shuffleArray(questions);
   
-  // Untuk setiap soal, acak pilihan jawabannya
   return shuffledQuestions.map(question => {
     const options = question.pilihan || question.options || {};
     const correctAnswer = question.jawaban || question.correct;
@@ -109,12 +132,10 @@ function prepareRandomizedQuiz(questions) {
     const optionsArray = Object.entries(options);
     if (optionsArray.length === 0) return question;
     
-    // Acak urutan pilihan
     const shuffledOptions = shuffleArray(optionsArray);
     let newCorrectAnswer = '';
     const newOptions = {};
     
-    // Rekonstruksi options dengan label baru
     shuffledOptions.forEach(([originalKey, value], idx) => {
       const newKey = String.fromCharCode(65 + idx);
       newOptions[newKey] = value;
@@ -124,7 +145,6 @@ function prepareRandomizedQuiz(questions) {
       }
     });
     
-    // Validasi jika tidak ditemukan exact match
     if (!newCorrectAnswer && correctAnswer && options[correctAnswer]) {
       const correctText = options[correctAnswer];
       Object.entries(newOptions).forEach(([key, value]) => {
@@ -134,7 +154,6 @@ function prepareRandomizedQuiz(questions) {
       });
     }
     
-    // Fallback: pilih huruf pertama jika masih kosong
     if (!newCorrectAnswer && Object.keys(newOptions).length > 0) {
       newCorrectAnswer = Object.keys(newOptions)[0];
     }
@@ -148,23 +167,32 @@ function prepareRandomizedQuiz(questions) {
   });
 }
 
-// ========== FUNGSI UTAMA (DIPERBAIKI) ==========
+// ========== FUNGSI LOADING ==========
 
-// Tampilkan loading
 function showLoading() {
-  if (loadingIndicator) {
-    loadingIndicator.style.display = 'flex';
+  let loadingIndicator = document.getElementById('loadingIndicator');
+  if (!loadingIndicator) {
+    loadingIndicator = document.createElement('div');
+    loadingIndicator.id = 'loadingIndicator';
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.innerHTML = `
+      <div class="loading-spinner"></div>
+      <p>Memuat data...</p>
+    `;
+    document.querySelector('main').appendChild(loadingIndicator);
   }
+  loadingIndicator.style.display = 'flex';
 }
 
-// Sembunyikan loading
 function hideLoading() {
+  const loadingIndicator = document.getElementById('loadingIndicator');
   if (loadingIndicator) {
     loadingIndicator.style.display = 'none';
   }
 }
 
-// Load Courses dengan natural sorting
+// ========== FUNGSI COURSE MANAGEMENT ==========
+
 async function loadCourses() {
   if (!mataKuliahId) {
     coursesList.innerHTML = `
@@ -192,10 +220,8 @@ async function loadCourses() {
       ...doc.data()
     }));
     
-    // Jika tidak ada field 'order', gunakan natural sort berdasarkan nama
     if (!courses.some(course => course.order !== undefined)) {
       courses.sort((a, b) => {
-        // Coba natural sort berdasarkan nama
         return naturalSort(a.nama || '', b.nama || '');
       });
     }
@@ -217,10 +243,8 @@ async function loadCourses() {
       return;
     }
     
-    // Group courses by kategori/tipe jika diperlukan
     const groupedCourses = {};
     courses.forEach(course => {
-      // Ekstrak kategori dari nama (misal: "Komunikasi Bisnis dan Teknis")
       const match = course.nama.match(/^(.+?)\s+\d+$/);
       const category = match ? match[1] : 'Lainnya';
       
@@ -232,13 +256,12 @@ async function loadCourses() {
     
     let htmlContent = '';
     
-    // Jika hanya satu kategori, tampilkan langsung
     if (Object.keys(groupedCourses).length === 1) {
       htmlContent = courses.map((course, index) => `
         <div class="course-item slide-in" style="animation-delay: ${index * 0.05}s;">
           <div class="left">
             <div class="course-badge ${course.badgeColor || 'primary'}">${course.nama?.charAt(0) || 'C'}</div>
-            <div>
+            <div class="course-details">
               <h3 style="margin-bottom: 4px;">${course.nama || 'Tanpa Nama'}</h3>
               <p class="muted">${course.description || 'Tidak ada deskripsi'}</p>
               <div style="display: flex; gap: 12px; margin-top: 8px; align-items: center;">
@@ -257,7 +280,6 @@ async function loadCourses() {
         </div>
       `).join('');
     } else {
-      // Jika multiple kategori, buat section per kategori
       Object.keys(groupedCourses).sort(naturalSort).forEach(category => {
         htmlContent += `
           <div class="category-section">
@@ -315,7 +337,8 @@ async function loadCourses() {
   }
 }
 
-// Start Quiz (tidak banyak perubahan, sudah bagus)
+// ========== QUIZ FUNCTIONS ==========
+
 window.startQuiz = async function(courseId, courseName) {
   currentCourse = { id: courseId, name: courseName };
   
@@ -355,15 +378,12 @@ window.startQuiz = async function(courseId, courseName) {
       return;
     }
     
-    // Acak soal
     randomizedQuestions = prepareRandomizedQuiz(originalQuestions);
     
-    // Initialize quiz
     currentQuestionIndex = 0;
     userAnswers = {};
     timer = 0;
     
-    // Start timer
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       timer++;
@@ -372,7 +392,6 @@ window.startQuiz = async function(courseId, courseName) {
       timerDisplay.textContent = `${minutes}:${seconds}`;
     }, 1000);
     
-    // Render first question
     renderQuestion();
     hideLoading();
     
@@ -394,30 +413,25 @@ window.startQuiz = async function(courseId, courseName) {
   }
 };
 
-// Render Question (dengan validasi lebih baik)
 function renderQuestion() {
   const question = randomizedQuestions[currentQuestionIndex];
   if (!question) return;
   
   quizProgress.textContent = `Soal ${currentQuestionIndex + 1}/${randomizedQuestions.length}`;
   
-  // Progress bar visual
   const progressPercentage = ((currentQuestionIndex + 1) / randomizedQuestions.length) * 100;
   quizProgress.setAttribute('data-progress', `${Math.round(progressPercentage)}%`);
   
-  // Tampilkan nomor soal yang sudah dijawab
   const answeredCount = Object.keys(userAnswers).length;
-  const progressText = document.getElementById('quizProgressText') || (() => {
-    const el = document.createElement('div');
-    el.id = 'quizProgressText';
-    el.className = 'quiz-progress-text';
-    quizProgress.parentNode.insertBefore(el, quizProgress);
-    return el;
-  })();
-  
+  let progressText = document.getElementById('quizProgressText');
+  if (!progressText) {
+    progressText = document.createElement('div');
+    progressText.id = 'quizProgressText';
+    progressText.className = 'quiz-progress-text';
+    quizProgress.parentNode.insertBefore(progressText, quizProgress.nextSibling);
+  }
   progressText.textContent = `(${answeredCount}/${randomizedQuestions.length} terjawab)`;
   
-  // Render pertanyaan
   const choicesHtml = ['A', 'B', 'C', 'D'].map(key => {
     const optionText = (question.pilihan || question.options || {})[key] || '';
     const isSelected = userAnswers[currentQuestionIndex] === key;
@@ -446,23 +460,19 @@ function renderQuestion() {
     </div>
   `;
   
-  // Update button states
   prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
   nextBtn.style.display = currentQuestionIndex < randomizedQuestions.length - 1 ? 'flex' : 'none';
   finishBtn.style.display = currentQuestionIndex === randomizedQuestions.length - 1 ? 'flex' : 'none';
   
-  // Update finish button text berdasarkan jumlah jawaban
   const unansweredCount = randomizedQuestions.length - Object.keys(userAnswers).length;
   finishBtn.innerHTML = unansweredCount > 0 
     ? `<i class="fas fa-flag"></i> Selesaikan (${unansweredCount} belum dijawab)`
     : `<i class="fas fa-check-circle"></i> Selesaikan Quiz`;
 }
 
-// Select Answer (tambah efek visual)
 window.selectAnswer = function(answer) {
   userAnswers[currentQuestionIndex] = answer;
   
-  // Tambah efek visual feedback
   const choices = document.querySelectorAll('.choice');
   choices.forEach(choice => {
     choice.classList.remove('selected');
@@ -471,7 +481,6 @@ window.selectAnswer = function(answer) {
     }
   });
   
-  // Update progress text
   const answeredCount = Object.keys(userAnswers).length;
   const progressText = document.getElementById('quizProgressText');
   if (progressText) {
@@ -479,84 +488,236 @@ window.selectAnswer = function(answer) {
   }
 };
 
-// ... (sisanya sama seperti sebelumnya, fungsi finishQuiz, showCourses, dll)
+// ========== QUIZ NAVIGATION ==========
 
-// ========== FUNGSI TAMBAHAN UNTUK UI ==========
+function goToPreviousQuestion() {
+  if (currentQuestionIndex > 0) {
+    currentQuestionIndex--;
+    renderQuestion();
+  }
+}
 
-// Tampilkan modal konfirmasi
-function showModal(title, message, onConfirm, onCancel = null) {
-  // Cek jika modal sudah ada
-  let modal = document.getElementById('customModal');
+function goToNextQuestion() {
+  if (currentQuestionIndex < randomizedQuestions.length - 1) {
+    currentQuestionIndex++;
+    renderQuestion();
+  }
+}
+
+// ========== FINISH QUIZ ==========
+
+async function finishQuiz() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  
+  let score = 0;
+  const results = randomizedQuestions.map((q, index) => {
+    const userAnswerKey = userAnswers[index];
+    const correctAnswerKey = q.jawaban;
+    const isCorrect = userAnswerKey === correctAnswerKey;
+    
+    if (isCorrect) score++;
+    
+    const userAnswerText = userAnswerKey 
+      ? `${userAnswerKey}. ${q.pilihan[userAnswerKey] || 'Tidak ada teks jawaban'}` 
+      : 'Tidak dijawab';
+    
+    const correctAnswerText = `${correctAnswerKey}. ${q.pilihan[correctAnswerKey] || 'Tidak ada teks jawaban'}`;
+    
+    const allOptions = [];
+    for (const [key, value] of Object.entries(q.pilihan || {})) {
+      allOptions.push(`${key}. ${value}`);
+    }
+    
+    return {
+      question: q.pertanyaan || q.question,
+      questionNumber: index + 1,
+      userAnswerKey,
+      userAnswerText,
+      correctAnswerKey,
+      correctAnswerText,
+      isCorrect,
+      explanation: q.explanation,
+      allOptions: allOptions.join(' | ')
+    };
+  });
+  
+  const result = {
+    courseName: currentCourse.name,
+    courseId: currentCourse.id,
+    totalQuestions: randomizedQuestions.length,
+    score: score,
+    percentage: Math.round((score / randomizedQuestions.length) * 100),
+    timeSpent: timer,
+    results: results,
+    timestamp: new Date().toISOString()
+  };
+  
+  localStorage.setItem('quizResult', JSON.stringify(result));
+  
+  try {
+    await addDoc(collection(db, "quiz_results"), {
+      courseId: currentCourse.id,
+      courseName: currentCourse.name,
+      score: score,
+      totalQuestions: randomizedQuestions.length,
+      timeSpent: timer,
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error saving result:", error);
+  }
+  
+  window.location.href = 'result.html';
+}
+
+// ========== COURSE NAVIGATION ==========
+
+window.showCourses = function() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  
+  quizSection.style.display = 'none';
+  coursesSection.style.display = 'block';
+  pageTitle.textContent = 'Quiz';
+  pageSubtitle.textContent = 'Pilih course';
+  backBtn.style.display = 'none';
+  
+  if (timerDisplay) {
+    timerDisplay.textContent = '00:00';
+  }
+  
+  loadCourses();
+};
+
+// ========== MODAL FUNCTIONS ==========
+
+function showConfirmModal(message, onConfirm, onCancel = null) {
+  let modal = document.getElementById('confirmModal');
+  
   if (!modal) {
     modal = document.createElement('div');
-    modal.id = 'customModal';
+    modal.id = 'confirmModal';
     modal.className = 'modal-overlay';
     modal.innerHTML = `
       <div class="modal">
         <div class="modal-header">
-          <h3 id="modalTitle"></h3>
-          <button class="modal-close" onclick="closeModal()">&times;</button>
+          <h3><i class="fas fa-exclamation-triangle"></i> Konfirmasi</h3>
+          <button class="modal-close" onclick="closeConfirmModal()">&times;</button>
         </div>
         <div class="modal-body">
-          <p id="modalMessage"></p>
+          <p class="modal-message">${message}</p>
         </div>
         <div class="modal-footer">
-          <button id="modalCancel" class="btn secondary">Batal</button>
-          <button id="modalConfirm" class="btn primary">Ya</button>
+          <button id="confirmCancel" class="btn secondary">Batal</button>
+          <button id="confirmOk" class="btn primary">Ya, Lanjutkan</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
   }
   
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalMessage').textContent = message;
+  const messageElement = modal.querySelector('.modal-message');
+  const cancelBtn = modal.querySelector('#confirmCancel');
+  const okBtn = modal.querySelector('#confirmOk');
   
-  const confirmBtn = document.getElementById('modalConfirm');
-  const cancelBtn = document.getElementById('modalCancel');
-  
-  const closeModal = () => {
-    modal.style.display = 'none';
-  };
-  
-  confirmBtn.onclick = () => {
-    closeModal();
-    if (onConfirm) onConfirm();
-  };
+  messageElement.textContent = message;
   
   cancelBtn.onclick = () => {
-    closeModal();
+    closeConfirmModal();
     if (onCancel) onCancel();
   };
   
+  okBtn.onclick = () => {
+    closeConfirmModal();
+    if (onConfirm) onConfirm();
+  };
+  
   modal.style.display = 'flex';
+  
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeConfirmModal();
+      if (onCancel) onCancel();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  
+  document.addEventListener('keydown', escHandler);
+  modal._escHandler = escHandler;
 }
 
-window.closeModal = function() {
-  const modal = document.getElementById('customModal');
-  if (modal) modal.style.display = 'none';
-};
+function closeConfirmModal() {
+  const modal = document.getElementById('confirmModal');
+  if (modal) {
+    modal.style.display = 'none';
+    if (modal._escHandler) {
+      document.removeEventListener('keydown', modal._escHandler);
+    }
+  }
+}
 
-// ========== INISIALISASI ==========
+window.closeConfirmModal = closeConfirmModal;
+
+function confirmQuit() {
+  const answeredCount = Object.keys(userAnswers).length;
+  const unansweredCount = randomizedQuestions.length - answeredCount;
+  
+  let message = 'Apakah Anda yakin ingin keluar dari quiz?';
+  if (answeredCount > 0) {
+    message += ` Anda sudah menjawab ${answeredCount} soal.`;
+  }
+  
+  showConfirmModal(message, () => {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    showCourses();
+  });
+}
+
+// ========== EVENT LISTENERS ==========
+
+function setupEventListeners() {
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+  }
+  
+  if (backBtn) {
+    backBtn.addEventListener('click', showCourses);
+  }
+  
+  if (prevBtn) {
+    prevBtn.addEventListener('click', goToPreviousQuestion);
+  }
+  
+  if (nextBtn) {
+    nextBtn.addEventListener('click', goToNextQuestion);
+  }
+  
+  if (finishBtn) {
+    finishBtn.addEventListener('click', finishQuiz);
+  }
+  
+  if (quitBtn) {
+    quitBtn.addEventListener('click', confirmQuit);
+  }
+}
+
+// ========== INITIALIZATION ==========
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
-  themeToggle.addEventListener('click', toggleTheme);
-  
-  // Tambah loading indicator jika belum ada
-  if (!document.getElementById('loadingIndicator')) {
-    const loadingEl = document.createElement('div');
-    loadingEl.id = 'loadingIndicator';
-    loadingEl.className = 'loading-indicator';
-    loadingEl.innerHTML = `
-      <div class="loading-spinner"></div>
-      <p>Memuat data...</p>
-    `;
-    document.querySelector('main').appendChild(loadingEl);
-  }
-  
+  setupEventListeners();
   loadCourses();
 });
 
-// Biarkan fungsi global lainnya tetap sama seperti sebelumnya
-// (showCourses, confirmQuit, toggleTheme, dll)
+// ========== GLOBAL FUNCTIONS ==========
+
+window.toggleTheme = toggleTheme;
+window.confirmQuit = confirmQuit;
