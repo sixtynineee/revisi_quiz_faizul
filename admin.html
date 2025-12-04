@@ -1,32 +1,118 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <!-- WAJIB untuk responsive mobile -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#075E54">
+    <!-- PWA & Mobile Meta Tags -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#075E54" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c1317" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <!-- Touch icon untuk Android -->
+    <meta name="apple-mobile-web-app-title" content="QuizApp">
+    <meta name="application-name" content="QuizApp">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-TileColor" content="#075E54">
+    <meta name="msapplication-tap-highlight" content="no">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+    
+    <!-- Icons -->
     <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/color/192/whatsapp.png">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/whatsapp.png">
-
-    <!-- PWA manifest (opsional) -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-startup-image" href="https://img.icons8.com/color/512/whatsapp.png">
+    
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QuizApp - Admin Login</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="mobile-optimized.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <style>
+        /* Additional mobile styles for admin */
+        @media (max-width: 768px) {
+            .form-group input {
+                font-size: 16px !important;
+                padding: 14px 16px !important;
+                min-height: 48px !important;
+            }
+            
+            .form-group button[type="submit"] {
+                min-height: 48px !important;
+            }
+        }
+        
+        /* Splash screen for admin */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #075E54;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        #splash-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .splash-logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        .splash-logo i {
+            font-size: 40px;
+            color: #25D366;
+        }
+        
+        .splash-text {
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+    </style>
 </head>
 <body data-theme="light">
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="splash-logo">
+            <i class="fas fa-lock"></i>
+        </div>
+        <div class="splash-text">Admin Login</div>
+    </div>
+
     <div class="app">
         <!-- Header -->
         <header class="topbar">
             <h1><i class="fas fa-user-shield"></i> Admin Login</h1>
             <div class="top-actions">
-                <a href="index.html" class="btn secondary">
+                <a href="index.html" class="btn secondary mobile-only">
+                    <i class="fas fa-home"></i>
+                </a>
+                <a href="index.html" class="btn secondary desktop-only">
                     <i class="fas fa-home"></i> Home
                 </a>
             </div>
@@ -34,7 +120,7 @@
 
         <!-- Main Content -->
         <main class="container">
-            <div class="card" style="max-width: 400px; margin: 60px auto;">
+            <div class="card" style="max-width: 400px; margin: 40px auto;">
                 <div style="text-align: center; margin-bottom: 30px;">
                     <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #25D366, #128C7E); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
                         <i class="fas fa-lock" style="color: white; font-size: 32px;"></i>
@@ -61,7 +147,7 @@
                     </div>
                     
                     <div class="form-group" style="margin-top: 24px;">
-                        <button type="submit" class="btn primary" style="width: 100%; padding: 12px;">
+                        <button type="submit" class="btn primary" style="width: 100%; padding: 14px;">
                             <i class="fas fa-sign-in-alt"></i> Login
                         </button>
                     </div>
@@ -89,6 +175,69 @@
     </div>
 
     <script type="module" src="admin-firebase.js"></script>
+    
+    <script>
+        // Hide splash screen
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('splash-screen').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('splash-screen').style.display = 'none';
+                }, 500);
+            }, 500);
+        });
+        
+        // Form submission feedback
+        const loginForm = document.getElementById('loginForm');
+        const loginStatus = document.getElementById('loginStatus');
+        
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                if (!email || !password) {
+                    loginStatus.innerHTML = '<p style="color: #ff3b30;">Email dan password harus diisi</p>';
+                    return;
+                }
+                
+                loginStatus.innerHTML = '<p style="color: #25D366;">Memproses login...</p>';
+                
+                // Form akan diproses oleh admin-firebase.js
+            });
+        }
+        
+        // Network status
+        function updateNetworkStatus() {
+            if (!navigator.onLine) {
+                const statusDiv = document.createElement('div');
+                statusDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: #FF9500; color: white; text-align: center; padding: 10px; z-index: 10000;';
+                statusDiv.innerHTML = '<i class="fas fa-wifi-slash"></i> Anda sedang offline';
+                document.body.prepend(statusDiv);
+                
+                setTimeout(() => {
+                    if (statusDiv.parentNode) {
+                        statusDiv.parentNode.removeChild(statusDiv);
+                    }
+                }, 5000);
+            }
+        }
+        
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
+        
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
     
     <style>
         .form-group {
@@ -133,4 +282,3 @@
     </style>
 </body>
 </html>
-
