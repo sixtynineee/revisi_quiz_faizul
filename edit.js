@@ -1,58 +1,12 @@
-// edit.js - Admin Dashboard CRUD Operations dengan Natural Sorting
+// edit.js - Admin Dashboard CRUD Operations dengan Natural Sorting dan Perlindungan Data
 import { 
   auth, db, signOut, 
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc, 
   query, orderBy, Timestamp, increment 
 } from './admin-firebase.js';
 
-// ========== FUNGSI NATURAL SORTING ==========
+// ========== VARIABEL GLOBAL UNTUK PERLINDUNGAN DATA ==========
 
-// Fungsi untuk mengekstrak angka dari nama
-function extractNumberFromName(name) {
-  if (!name) return 0;
-  
-  // Cari angka di akhir string
-  const match = name.match(/(\d+)$/);
-  if (match) {
-    return parseInt(match[1], 10);
-  }
-  
-  // Jika tidak ada angka di akhir, cari angka di mana saja
-  const anyNumberMatch = name.match(/\d+/);
-  if (anyNumberMatch) {
-    return parseInt(anyNumberMatch[0], 10);
-  }
-  
-  return 0; // Default jika tidak ada angka
-}
-
-// Natural sort function untuk mengurutkan dengan benar
-function naturalSort(array, field = 'nama') {
-  if (!array || array.length === 0) return array;
-  
-  return [...array].sort((a, b) => {
-    const nameA = (a[field] || '').toString();
-    const nameB = (b[field] || '').toString();
-    
-    // Extract numbers from names
-    const numA = extractNumberFromName(nameA);
-    const numB = extractNumberFromName(nameB);
-    
-    // Jika kedua nama memiliki angka, urutkan berdasarkan angka
-    if (numA !== 0 && numB !== 0) {
-      return numA - numB;
-    }
-    
-    // Jika hanya satu yang punya angka, yang punya angka duluan
-    if (numA !== 0 && numB === 0) return -1;
-    if (numA === 0 && numB !== 0) return 1;
-    
-    // Jika tidak ada angka di kedua nama, urutkan alfabet biasa
-    return nameA.localeCompare(nameB, 'id', { numeric: true });
-  });
-}
-
-// State
 let currentView = 'mata-kuliah';
 let currentMataKuliah = null;
 let currentCourse = null;
@@ -60,7 +14,147 @@ let mataKuliahList = [];
 let coursesList = [];
 let soalList = [];
 
-// DOM Elements
+// Variabel untuk melacak perubahan form
+let isFormDirty = false;
+let formDataCache = {};
+let currentFormId = null;
+
+// ========== FUNGSI NATURAL SORTING ==========
+
+function extractNumberFromName(name) {
+  if (!name) return 0;
+  
+  const match = name.match(/(\d+)$/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  
+  const anyNumberMatch = name.match(/\d+/);
+  if (anyNumberMatch) {
+    return parseInt(anyNumberMatch[0], 10);
+  }
+  
+  return 0;
+}
+
+function naturalSort(array, field = 'nama') {
+  if (!array || array.length === 0) return array;
+  
+  return [...array].sort((a, b) => {
+    const nameA = (a[field] || '').toString();
+    const nameB = (b[field] || '').toString();
+    
+    const numA = extractNumberFromName(nameA);
+    const numB = extractNumberFromName(nameB);
+    
+    if (numA !== 0 && numB !== 0) {
+      return numA - numB;
+    }
+    
+    if (numA !== 0 && numB === 0) return -1;
+    if (numA === 0 && numB !== 0) return 1;
+    
+    return nameA.localeCompare(nameB, 'id', { numeric: true });
+  });
+}
+
+// ========== SISTEM PERLINDUNGAN DATA FORM ==========
+
+// Fungsi untuk melacak perubahan di form
+function setupFormProtection(formId) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+  
+  // Reset status form
+  isFormDirty = false;
+  currentFormId = formId;
+  
+  // Deteksi perubahan di semua input
+  const inputs = form.querySelectorAll('input, textarea, select');
+  inputs.forEach(input => {
+    const originalValue = input.value;
+    
+    // Event untuk perubahan teks
+    input.addEventListener('input', () => {
+      if (input.value !== originalValue) {
+        isFormDirty = true;
+      }
+    });
+    
+    // Event untuk perubahan dropdown
+    input.addEventListener('change', () => {
+      isFormDirty = true;
+    });
+  });
+  
+  // Auto-save draft setiap 10 detik (opsional)
+  setInterval(() => saveFormDraft(formId), 10000);
+}
+
+// Simpan draft sementara
+function saveFormDraft(formId) {
+  if (!isFormDirty) return;
+  
+  const form = document.getElementById(formId);
+  if (!form) return;
+  
+  const inputs = form.querySelectorAll('input, textarea, select');
+  formDataCache[formId] = {};
+  
+  inputs.forEach(input => {
+    if (input.type !== 'submit' && input.type !== 'button') {
+      formDataCache[formId][input.id] = input.value;
+    }
+  });
+  
+  // Simpan ke localStorage
+  localStorage.setItem(`form_draft_${formId}`, JSON.stringify(formDataCache[formId]));
+}
+
+// Muat draft jika ada
+function loadFormDraft(formId) {
+  const draftData = localStorage.getItem(`form_draft_${formId}`);
+  if (!draftData) return false;
+  
+  try {
+    const draft = JSON.parse(draftData);
+    let hasDraft = false;
+    
+    Object.keys(draft).forEach(inputId => {
+      const input = document.getElementById(inputId);
+      if (input && draft[inputId]) {
+        input.value = draft[inputId];
+        hasDraft = true;
+      }
+    });
+    
+    if (hasDraft) {
+      const restore = confirm('Ada data yang belum disimpan dari sesi sebelumnya. Mau memulihkan?');
+      if (restore) {
+        isFormDirty = true;
+        return true;
+      } else {
+        // Hapus draft jika tidak dipulihkan
+        localStorage.removeItem(`form_draft_${formId}`);
+      }
+    }
+  } catch (e) {
+    console.log('Gagal memuat draft:', e);
+  }
+  
+  return false;
+}
+
+// Hapus draft setelah sukses simpan
+function clearFormDraft(formId) {
+  localStorage.removeItem(`form_draft_${formId}`);
+  delete formDataCache[formId];
+  isFormDirty = false;
+  currentFormId = null;
+}
+
+// ========== DOM ELEMENTS ==========
+
 const userInfo = document.getElementById('userInfo');
 const logoutBtn = document.getElementById('logoutBtn');
 const refreshBtn = document.getElementById('refreshBtn');
@@ -79,7 +173,8 @@ const modalTitle = document.getElementById('modalTitle');
 const modalBody = document.getElementById('modalBody');
 const modalClose = document.querySelector('.modal-close');
 
-// Initialize
+// ========== INITIALIZATION ==========
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Set user info
   const adminEmail = localStorage.getItem('adminEmail');
@@ -93,31 +188,42 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Event Listeners
   logoutBtn.addEventListener('click', handleLogout);
   refreshBtn.addEventListener('click', () => loadView(currentView));
-  modalClose.addEventListener('click', () => hideModal());
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) hideModal();
-  });
+  
+  // Modal event listeners dengan proteksi
+  modalClose.addEventListener('click', handleModalClose);
+  modal.addEventListener('click', handleModalOverlayClick);
+  
+  // Tambahkan event listener untuk ESC key
+  document.addEventListener('keydown', handleEscapeKey);
+  
+  // Tambahkan event listener untuk prevent page unload
+  window.addEventListener('beforeunload', handleBeforeUnload);
   
   // Menu navigation
   menuButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      // Remove active class from all buttons
       menuButtons.forEach(b => b.classList.remove('active'));
-      // Add active class to clicked button
       btn.classList.add('active');
-      // Set current view
       currentView = btn.dataset.view;
-      // Load view
       loadView(currentView);
     });
   });
   
   // Load initial view
   loadView(currentView);
+  initTheme();
 });
 
-// Logout Handler
+// ========== HANDLERS DENGAN PROTEKSI ==========
+
+// Handle logout dengan konfirmasi jika ada form yang belum disimpan
 async function handleLogout() {
+  if (isFormDirty) {
+    if (!confirm('Ada perubahan yang belum disimpan. Yakin ingin logout? Data yang belum disimpan akan hilang.')) {
+      return;
+    }
+  }
+  
   try {
     await signOut(auth);
     localStorage.removeItem('adminToken');
@@ -129,15 +235,76 @@ async function handleLogout() {
   }
 }
 
-// Load View
+// Handle modal close dengan proteksi
+function handleModalClose() {
+  if (isFormDirty) {
+    if (!confirm('Ada perubahan yang belum disimpan. Yakin ingin keluar? Data yang sudah diisi akan hilang.')) {
+      return;
+    }
+  }
+  hideModal();
+}
+
+// Handle klik di luar modal dengan proteksi
+function handleModalOverlayClick(e) {
+  if (e.target === modal) {
+    if (isFormDirty) {
+      if (!confirm('Ada perubahan yang belum disimpan. Yakin ingin keluar? Data yang sudah diisi akan hilang.')) {
+        return;
+      }
+    }
+    hideModal();
+  }
+}
+
+// Handle escape key dengan proteksi
+function handleEscapeKey(e) {
+  if (e.key === 'Escape' && modal.style.display === 'flex') {
+    if (isFormDirty) {
+      if (!confirm('Ada perubahan yang belum disimpan. Yakin ingin keluar? Data yang sudah diisi akan hilang.')) {
+        return;
+      }
+    }
+    hideModal();
+  }
+}
+
+// Handle sebelum unload halaman
+function handleBeforeUnload(e) {
+  if (isFormDirty) {
+    e.preventDefault();
+    e.returnValue = 'Ada perubahan yang belum disimpan. Yakin ingin meninggalkan halaman?';
+    return e.returnValue;
+  }
+}
+
+// ========== MODAL FUNCTIONS ==========
+
+function showModal() {
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  // Reset form protection untuk modal baru
+  isFormDirty = false;
+  currentFormId = null;
+}
+
+function hideModal() {
+  modal.style.display = 'none';
+  document.body.style.overflow = 'auto';
+  // Clear form draft
+  if (currentFormId) {
+    clearFormDraft(currentFormId);
+  }
+}
+
+// ========== LOAD VIEW FUNCTIONS ==========
+
 async function loadView(view) {
   contentTitle.textContent = getViewTitle(view);
   contentSubtitle.textContent = getViewSubtitle(view);
   
-  // Clear action buttons
   actionButtons.innerHTML = '';
   
-  // Show loading
   adminContent.innerHTML = `
     <div style="text-align: center; padding: 60px 20px;">
       <div class="spinner"></div>
@@ -161,11 +328,9 @@ async function loadView(view) {
       break;
   }
   
-  // Update global stats
   await updateGlobalStats();
 }
 
-// Get View Titles
 function getViewTitle(view) {
   const titles = {
     'mata-kuliah': '📚 Kelola Mata Kuliah',
@@ -186,7 +351,6 @@ function getViewSubtitle(view) {
   return subtitles[view] || '';
 }
 
-// Add Action Button
 function addActionButton(text, onClick, type = 'primary') {
   const btn = document.createElement('button');
   btn.className = `btn ${type}`;
@@ -195,15 +359,14 @@ function addActionButton(text, onClick, type = 'primary') {
   actionButtons.appendChild(btn);
 }
 
-// Update Global Stats
+// ========== GLOBAL STATS ==========
+
 async function updateGlobalStats() {
   try {
-    // Count mata kuliah
     const mkSnapshot = await getDocs(collection(db, "mata_kuliah"));
     const mkCount = mkSnapshot.size;
     totalMataKuliah.textContent = mkCount;
     
-    // Count courses
     let coursesCount = 0;
     let soalCount = 0;
     
@@ -225,22 +388,18 @@ async function updateGlobalStats() {
   }
 }
 
-// ==============================
-// MATA KULIAH CRUD
-// ==============================
+// ========== MATA KULIAH CRUD ==========
 
 async function loadMataKuliah() {
   try {
     const q = query(collection(db, "mata_kuliah"));
     const snapshot = await getDocs(q);
     
-    // Konversi ke array
     let mataKuliahData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // TERAPKAN NATURAL SORTING pada mata kuliah
     mataKuliahList = naturalSort(mataKuliahData, 'nama');
     
     if (mataKuliahList.length === 0) {
@@ -314,7 +473,6 @@ async function loadMataKuliah() {
   }
 }
 
-// Show Mata Kuliah Form
 window.showMataKuliahForm = function(mkId = null) {
   const isEdit = mkId !== null;
   const mk = isEdit ? mataKuliahList.find(m => m.id === mkId) : null;
@@ -334,7 +492,7 @@ window.showMataKuliahForm = function(mkId = null) {
       </div>
       
       <div class="form-actions">
-        <button type="button" class="btn secondary" onclick="hideModal()">Batal</button>
+        <button type="button" class="btn secondary" id="cancelBtn">Batal</button>
         <button type="submit" class="btn primary">
           ${isEdit ? 'Update' : 'Simpan'}
         </button>
@@ -342,7 +500,18 @@ window.showMataKuliahForm = function(mkId = null) {
     </form>
   `;
   
+  // Setup form protection
+  setupFormProtection('mataKuliahForm');
+  
+  // Load draft jika ada
+  loadFormDraft('mataKuliahForm');
+  
   const form = document.getElementById('mataKuliahForm');
+  const cancelBtn = document.getElementById('cancelBtn');
+  
+  // Setup cancel button
+  cancelBtn.addEventListener('click', handleModalClose);
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -371,6 +540,8 @@ window.showMataKuliahForm = function(mkId = null) {
         alert('Mata kuliah berhasil ditambahkan');
       }
       
+      // Clear draft setelah sukses
+      clearFormDraft('mataKuliahForm');
       hideModal();
       loadView('mata-kuliah');
       
@@ -383,36 +554,30 @@ window.showMataKuliahForm = function(mkId = null) {
   showModal();
 };
 
-// Edit Mata Kuliah
 window.editMataKuliah = function(mkId) {
   window.showMataKuliahForm(mkId);
 };
 
-// Delete Mata Kuliah
 window.deleteMataKuliah = async function(mkId) {
   if (!confirm('Apakah Anda yakin ingin menghapus mata kuliah ini? Semua course dan soal di dalamnya juga akan terhapus.')) {
     return;
   }
   
   try {
-    // Delete all courses and questions first
     const coursesSnapshot = await getDocs(collection(db, "mata_kuliah", mkId, "courses"));
     const deletePromises = [];
     
     for (const courseDoc of coursesSnapshot.docs) {
-      // Delete all questions in this course
       const questionsSnapshot = await getDocs(collection(db, "mata_kuliah", mkId, "courses", courseDoc.id, "soal"));
       questionsSnapshot.docs.forEach(qDoc => {
         deletePromises.push(deleteDoc(doc(db, "mata_kuliah", mkId, "courses", courseDoc.id, "soal", qDoc.id)));
       });
       
-      // Delete the course
       deletePromises.push(deleteDoc(doc(db, "mata_kuliah", mkId, "courses", courseDoc.id)));
     }
     
     await Promise.all(deletePromises);
     
-    // Delete the mata kuliah
     await deleteDoc(doc(db, "mata_kuliah", mkId));
     
     alert('Mata kuliah berhasil dihapus');
@@ -424,20 +589,16 @@ window.deleteMataKuliah = async function(mkId) {
   }
 };
 
-// ==============================
-// COURSES CRUD
-// ==============================
+// ========== COURSES CRUD ==========
 
 async function loadCoursesView() {
   try {
-    // First load mata kuliah for selection
     const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah")));
     const mataKuliah = mkSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // TERAPKAN NATURAL SORTING pada mata kuliah
     const sortedMataKuliah = naturalSort(mataKuliah, 'nama');
     
     if (sortedMataKuliah.length === 0) {
@@ -484,7 +645,6 @@ async function loadCoursesView() {
       }
     });
     
-    // Add action button for adding course
     addActionButton('+ Tambah Course', () => {
       if (!currentMataKuliah) {
         alert('Pilih mata kuliah terlebih dahulu');
@@ -509,17 +669,14 @@ async function loadCoursesView() {
 
 async function loadCourses(mataKuliahId) {
   try {
-    // Ambil data dari Firestore
     const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"));
     const snapshot = await getDocs(q);
     
-    // Konversi ke array
     let coursesData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // TERAPKAN NATURAL SORTING
     coursesList = naturalSort(coursesData, 'nama');
     
     const coursesContainer = document.getElementById('coursesContainer');
@@ -593,7 +750,6 @@ async function loadCourses(mataKuliahId) {
   }
 }
 
-// Show Course Form
 window.showCourseForm = function(courseId = null) {
   if (!currentMataKuliah) {
     alert('Pilih mata kuliah terlebih dahulu');
@@ -618,7 +774,7 @@ window.showCourseForm = function(courseId = null) {
       </div>
       
       <div class="form-actions">
-        <button type="button" class="btn secondary" onclick="hideModal()">Batal</button>
+        <button type="button" class="btn secondary" id="cancelBtn">Batal</button>
         <button type="submit" class="btn primary">
           ${isEdit ? 'Update' : 'Simpan'}
         </button>
@@ -626,7 +782,18 @@ window.showCourseForm = function(courseId = null) {
     </form>
   `;
   
+  // Setup form protection
+  setupFormProtection('courseForm');
+  
+  // Load draft jika ada
+  loadFormDraft('courseForm');
+  
   const form = document.getElementById('courseForm');
+  const cancelBtn = document.getElementById('cancelBtn');
+  
+  // Setup cancel button
+  cancelBtn.addEventListener('click', handleModalClose);
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -653,7 +820,6 @@ window.showCourseForm = function(courseId = null) {
           createdAt: Timestamp.now()
         });
         
-        // Update totalCourses counter in mata kuliah
         await updateDoc(doc(db, "mata_kuliah", currentMataKuliah.id), {
           totalCourses: increment(1)
         });
@@ -661,6 +827,8 @@ window.showCourseForm = function(courseId = null) {
         alert('Course berhasil ditambahkan');
       }
       
+      // Clear draft setelah sukses
+      clearFormDraft('courseForm');
       hideModal();
       loadCourses(currentMataKuliah.id);
       
@@ -673,19 +841,16 @@ window.showCourseForm = function(courseId = null) {
   showModal();
 };
 
-// Edit Course
 window.editCourse = function(courseId) {
   window.showCourseForm(courseId);
 };
 
-// Delete Course
 window.deleteCourse = async function(courseId) {
   if (!confirm('Apakah Anda yakin ingin menghapus course ini? Semua soal di dalamnya juga akan terhapus.')) {
     return;
   }
   
   try {
-    // Delete all questions first
     const questionsSnapshot = await getDocs(collection(db, "mata_kuliah", currentMataKuliah.id, "courses", courseId, "soal"));
     const deletePromises = questionsSnapshot.docs.map(qDoc => 
       deleteDoc(doc(db, "mata_kuliah", currentMataKuliah.id, "courses", courseId, "soal", qDoc.id))
@@ -693,10 +858,8 @@ window.deleteCourse = async function(courseId) {
     
     await Promise.all(deletePromises);
     
-    // Delete the course
     await deleteDoc(doc(db, "mata_kuliah", currentMataKuliah.id, "courses", courseId));
     
-    // Update totalCourses counter in mata kuliah
     await updateDoc(doc(db, "mata_kuliah", currentMataKuliah.id), {
       totalCourses: increment(-1)
     });
@@ -710,20 +873,16 @@ window.deleteCourse = async function(courseId) {
   }
 };
 
-// ==============================
-// SOAL CRUD
-// ==============================
+// ========== SOAL CRUD ==========
 
 async function loadSoalView() {
   try {
-    // First load mata kuliah for selection
     const mkSnapshot = await getDocs(query(collection(db, "mata_kuliah")));
     const mataKuliah = mkSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // TERAPKAN NATURAL SORTING pada mata kuliah
     const sortedMataKuliah = naturalSort(mataKuliah, 'nama');
     
     if (sortedMataKuliah.length === 0) {
@@ -751,7 +910,7 @@ async function loadSoalView() {
             ${sortedMataKuliah.map(mk => `
               <option value="${mk.id}">${mk.nama}</option>
             `).join('')}
-        </select>
+          </select>
         </div>
         
         <div class="form-group" style="flex: 1;">
@@ -792,7 +951,6 @@ async function loadSoalView() {
       }
     });
     
-    // Add action button for adding soal
     addActionButton('+ Tambah Soal', () => {
       if (!currentMataKuliah || !currentCourse) {
         alert('Pilih mata kuliah dan course terlebih dahulu');
@@ -820,13 +978,11 @@ async function loadCoursesForSoal(mataKuliahId) {
     const q = query(collection(db, "mata_kuliah", mataKuliahId, "courses"));
     const snapshot = await getDocs(q);
     
-    // Konversi ke array
     let coursesData = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // TERAPKAN NATURAL SORTING
     coursesList = naturalSort(coursesData, 'nama');
     
     const courseSelect = document.getElementById('courseSelectSoal');
@@ -920,7 +1076,6 @@ async function loadSoal(courseId) {
   }
 }
 
-// Show Soal Form
 window.showSoalForm = function(soalId = null) {
   if (!currentMataKuliah || !currentCourse) {
     alert('Pilih mata kuliah dan course terlebih dahulu');
@@ -978,7 +1133,7 @@ window.showSoalForm = function(soalId = null) {
       </div>
       
       <div class="form-actions">
-        <button type="button" class="btn secondary" onclick="hideModal()">Batal</button>
+        <button type="button" class="btn secondary" id="cancelBtn">Batal</button>
         <button type="submit" class="btn primary">
           ${isEdit ? 'Update' : 'Simpan'}
         </button>
@@ -986,7 +1141,18 @@ window.showSoalForm = function(soalId = null) {
     </form>
   `;
   
+  // Setup form protection
+  setupFormProtection('soalForm');
+  
+  // Load draft jika ada
+  loadFormDraft('soalForm');
+  
   const form = document.getElementById('soalForm');
+  const cancelBtn = document.getElementById('cancelBtn');
+  
+  // Setup cancel button
+  cancelBtn.addEventListener('click', handleModalClose);
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -998,7 +1164,6 @@ window.showSoalForm = function(soalId = null) {
     const jawaban = document.getElementById('soalJawaban').value;
     const penjelasan = document.getElementById('soalPenjelasan').value.trim();
     
-    // Validation
     if (!pertanyaan || !pilihanA || !pilihanB || !pilihanC || !pilihanD || !jawaban) {
       alert('Semua field wajib diisi kecuali penjelasan');
       return;
@@ -1029,7 +1194,6 @@ window.showSoalForm = function(soalId = null) {
           createdAt: Timestamp.now()
         });
         
-        // Update totalSoal counter in course
         await updateDoc(doc(db, "mata_kuliah", currentMataKuliah.id, "courses", currentCourse.id), {
           totalSoal: increment(1)
         });
@@ -1037,6 +1201,8 @@ window.showSoalForm = function(soalId = null) {
         alert('Soal berhasil ditambahkan');
       }
       
+      // Clear draft setelah sukses
+      clearFormDraft('soalForm');
       hideModal();
       loadSoal(currentCourse.id);
       
@@ -1049,12 +1215,10 @@ window.showSoalForm = function(soalId = null) {
   showModal();
 };
 
-// Edit Soal
 window.editSoal = function(soalId) {
   window.showSoalForm(soalId);
 };
 
-// Delete Soal
 window.deleteSoal = async function(soalId) {
   if (!confirm('Apakah Anda yakin ingin menghapus soal ini?')) {
     return;
@@ -1063,7 +1227,6 @@ window.deleteSoal = async function(soalId) {
   try {
     await deleteDoc(doc(db, "mata_kuliah", currentMataKuliah.id, "courses", currentCourse.id, "soal", soalId));
     
-    // Update totalSoal counter in course
     await updateDoc(doc(db, "mata_kuliah", currentMataKuliah.id, "courses", currentCourse.id), {
       totalSoal: increment(-1)
     });
@@ -1077,26 +1240,21 @@ window.deleteSoal = async function(soalId) {
   }
 };
 
-// ==============================
-// STATISTICS
-// ==============================
+// ========== STATISTICS ==========
 
 async function loadStats() {
   try {
-    // Get quiz results
     const resultsSnapshot = await getDocs(collection(db, "quiz_results"));
     const results = resultsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
     
-    // Calculate statistics
     const totalAttempts = results.length;
     const totalParticipants = [...new Set(results.map(r => r.userId || 'anonymous'))].length;
     const averageScore = totalAttempts > 0 ? 
       results.reduce((sum, r) => sum + (r.score || 0), 0) / totalAttempts : 0;
     
-    // Get popular courses
     const courseStats = {};
     results.forEach(r => {
       const courseName = r.courseName || 'Unknown';
@@ -1202,6 +1360,31 @@ async function loadStats() {
       </div>
     `;
     
+    // Add CSS for stat cards
+    const style = document.createElement('style');
+    style.textContent = `
+      .stat-card {
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid var(--border-color);
+      }
+      
+      .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+      }
+    `;
+    document.head.appendChild(style);
+    
   } catch (error) {
     console.error('Error loading stats:', error);
     adminContent.innerHTML = `
@@ -1214,50 +1397,9 @@ async function loadStats() {
       </div>
     `;
   }
-  
-  // Add CSS for stat cards
-  const style = document.createElement('style');
-  style.textContent = `
-    .stat-card {
-      background: var(--bg-secondary);
-      border-radius: 12px;
-      padding: 20px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      border: 1px solid var(--border-color);
-    }
-    
-    .stat-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-    }
-  `;
-  document.head.appendChild(style);
 }
 
-// ==============================
-// MODAL FUNCTIONS
-// ==============================
-
-function showModal() {
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-
-function hideModal() {
-  modal.style.display = 'none';
-  document.body.style.overflow = 'auto';
-}
-
-// ==============================
-// THEME MANAGEMENT
-// ==============================
+// ========== THEME MANAGEMENT ==========
 
 function initTheme() {
   const savedTheme = localStorage.getItem('quiz-theme');
@@ -1289,8 +1431,6 @@ if (themeToggle) {
       : '<i class="fas fa-sun"></i>';
   });
 }
-
-initTheme();
 
 // Make functions globally available
 window.hideModal = hideModal;
