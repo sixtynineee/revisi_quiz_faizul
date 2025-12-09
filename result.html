@@ -658,7 +658,7 @@
         window.addEventListener('offline', updateNetworkStatus);
         updateNetworkStatus();
 
-        // JavaScript untuk result.html
+        // JavaScript untuk result.html - VERSI SEDERHANA
         document.addEventListener('DOMContentLoaded', function() {
             loadResult();
             initTheme();
@@ -670,17 +670,23 @@
         });
 
         function loadResult() {
-            const resultData = JSON.parse(localStorage.getItem('quizResult'));
-            
-            if (!resultData) {
-                showNoResult();
-                return;
+            try {
+                const resultData = JSON.parse(localStorage.getItem('quizResult'));
+                
+                if (!resultData) {
+                    showNoResult();
+                    return;
+                }
+                
+                displayResult(resultData);
+            } catch (error) {
+                console.error('Error loading result:', error);
+                showError();
             }
-            
-            displayResult(resultData);
         }
 
         function displayResult(result) {
+            // Update UI elements
             const courseName = document.getElementById('courseName');
             const scorePercentage = document.getElementById('scorePercentage');
             const scoreText = document.getElementById('scoreText');
@@ -688,23 +694,57 @@
             const correctCount = document.getElementById('correctCount');
             const totalQuestions = document.getElementById('totalQuestions');
             
-            if (courseName) courseName.textContent = `Mata Kuliah: ${result.courseName}`;
-            if (scorePercentage) scorePercentage.textContent = `${result.percentage}%`;
-            if (scoreText) scoreText.textContent = `${result.score} dari ${result.totalQuestions} soal benar`;
+            if (courseName) {
+                courseName.textContent = result.courseName ? 
+                    `Mata Kuliah: ${result.courseName}` : 
+                    'Mata Kuliah: Tidak tersedia';
+            }
+            
+            if (scorePercentage) scorePercentage.textContent = `${result.percentage || 0}%`;
+            
+            if (scoreText) {
+                scoreText.textContent = `${result.score || 0} dari ${result.totalQuestions || 0} soal benar`;
+            }
             
             if (scoreTime) {
-                const minutes = Math.floor(result.timeSpent / 60).toString().padStart(2, '0');
-                const seconds = (result.timeSpent % 60).toString().padStart(2, '0');
+                const minutes = Math.floor((result.timeSpent || 0) / 60).toString().padStart(2, '0');
+                const seconds = ((result.timeSpent || 0) % 60).toString().padStart(2, '0');
                 scoreTime.textContent = `Waktu pengerjaan: ${minutes}:${seconds}`;
             }
             
-            if (correctCount) correctCount.textContent = result.score;
-            if (totalQuestions) totalQuestions.textContent = result.totalQuestions;
+            if (correctCount) correctCount.textContent = result.score || 0;
+            if (totalQuestions) totalQuestions.textContent = result.totalQuestions || 0;
             
-            displayQuestions(result.results);
+            // Display questions if available
+            if (result.results && result.results.length > 0) {
+                displayQuestions(result.results);
+            } else {
+                const questionsList = document.getElementById('questionsList');
+                if (questionsList) {
+                    questionsList.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-info-circle"></i>
+                            <p>Detail jawaban tidak tersedia</p>
+                        </div>
+                    `;
+                }
+            }
             
-            // Update tombol berdasarkan data result
+            // TAMPILKAN HANYA SATU TOMBOL: KEMBALI KE COURSE
             updateControlButtons(result);
+        }
+
+        function updateControlButtons(result) {
+            const controlsContainer = document.getElementById('controlsContainer');
+            if (!controlsContainer) return;
+            
+            // SELALU TAMPILKAN TOMBOL "KEMBALI KE COURSE"
+            // User akan memilih course lagi jika ingin mengulang
+            controlsContainer.innerHTML = `
+                <a href="quiz.html" class="btn btn-primary">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Course
+                </a>
+            `;
         }
 
         function displayQuestions(results) {
@@ -784,38 +824,6 @@
             }, 100);
         }
 
-        function updateControlButtons(result) {
-            const controlsContainer = document.getElementById('controlsContainer');
-            if (!controlsContainer) return;
-            
-            // Ambil mataKuliahId dari result atau URL
-            let mataKuliahId = result.mataKuliahId || null;
-            let courseId = result.courseId || null;
-            
-            // Buat URL untuk tombol
-            let backUrl = 'index.html';
-            let retryUrl = 'quiz.html';
-            
-            if (mataKuliahId) {
-                backUrl = `quiz.html?mataKuliah=${mataKuliahId}`;
-                retryUrl = `quiz.html?mataKuliah=${mataKuliahId}`;
-                
-                // Tambahkan courseId jika ada untuk langsung memulai quiz
-                if (courseId) {
-                    retryUrl += `&course=${courseId}`;
-                }
-            }
-            
-            controlsContainer.innerHTML = `
-                <a href="${backUrl}" class="btn btn-primary">
-                    <i class="fas fa-arrow-left"></i> Kembali ke Course
-                </a>
-                <a href="${retryUrl}" class="btn btn-secondary">
-                    <i class="fas fa-redo"></i> Coba Lagi
-                </a>
-            `;
-        }
-
         function showNoResult() {
             const container = document.querySelector('.container');
             if (!container) return;
@@ -837,6 +845,34 @@
             `;
             
             // Hide bottom nav when no result
+            const bottomNav = document.querySelector('.mobile-bottom-nav');
+            if (bottomNav) {
+                bottomNav.style.display = 'none';
+            }
+        }
+
+        function showError() {
+            const container = document.querySelector('.container');
+            if (!container) return;
+            
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-bug" style="font-size: 48px; color: #f44336;"></i>
+                    <h2 style="margin-bottom: 10px;">Terjadi Kesalahan</h2>
+                    <p style="color: #6c757d; margin-bottom: 30px;">
+                        Gagal memuat hasil quiz. Silakan coba lagi atau mulai quiz baru.
+                    </p>
+                    <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button onclick="location.reload()" class="btn btn-primary">
+                            <i class="fas fa-redo"></i> Muat Ulang
+                        </button>
+                        <a href="index.html" class="btn btn-secondary">
+                            <i class="fas fa-home"></i> Kembali ke Home
+                        </a>
+                    </div>
+                </div>
+            `;
+            
             const bottomNav = document.querySelector('.mobile-bottom-nav');
             if (bottomNav) {
                 bottomNav.style.display = 'none';
