@@ -428,6 +428,12 @@
                 display: flex;
                 justify-content: space-around;
             }
+            
+            /* Hanya 3 item di bottom nav untuk result page */
+            .mobile-bottom-nav .nav-item {
+                flex: 1;
+                text-align: center;
+            }
         }
 
         .nav-item {
@@ -603,15 +609,11 @@
         </div>
     </div>
 
-    <!-- Mobile Bottom Navigation -->
+    <!-- Mobile Bottom Navigation (MODIFIED - Hanya 3 item) -->
     <nav class="mobile-bottom-nav">
         <a href="index.html" class="nav-item">
             <i class="fas fa-home"></i>
             <span>Home</span>
-        </a>
-        <a href="quiz.html" class="nav-item">
-            <i class="fas fa-play-circle"></i>
-            <span>Quiz</span>
         </a>
         <a href="result.html" class="nav-item active">
             <i class="fas fa-chart-bar"></i>
@@ -660,6 +662,7 @@
 
         // JavaScript untuk result.html - VERSI SEDERHANA
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== RESULT PAGE LOADED ===');
             loadResult();
             initTheme();
             
@@ -667,7 +670,16 @@
             if (themeToggle) {
                 themeToggle.addEventListener('click', toggleTheme);
             }
+            
+            // Atur ulang bottom navigation untuk result page
+            setupBottomNavigation();
         });
+
+        function setupBottomNavigation() {
+            // Untuk result page, kita hapus tombol Quiz dari bottom nav
+            // Sudah dihandle di HTML dengan hanya 3 item
+            console.log('Bottom navigation setup for result page');
+        }
 
         function loadResult() {
             try {
@@ -730,7 +742,7 @@
                 }
             }
             
-            // TAMPILKAN HANYA SATU TOMBOL: KEMBALI KE COURSE
+            // TAMPILKAN HANYA SATU TOMBOL: KEMBALI KE HALAMAN DEPAN
             updateControlButtons(result);
         }
 
@@ -738,11 +750,10 @@
             const controlsContainer = document.getElementById('controlsContainer');
             if (!controlsContainer) return;
             
-            // SELALU TAMPILKAN TOMBOL "KEMBALI KE COURSE"
-            // User akan memilih course lagi jika ingin mengulang
+            // SELALU TAMPILKAN TOMBOL "KEMBALI KE HALAMAN DEPAN" (index.html)
             controlsContainer.innerHTML = `
-                <a href="quiz.html" class="btn btn-primary">
-                    <i class="fas fa-arrow-left"></i> Kembali ke Course
+                <a href="index.html" class="btn btn-primary" style="background: #25D366;">
+                    <i class="fas fa-home"></i> Kembali ke Halaman Depan
                 </a>
             `;
         }
@@ -834,8 +845,8 @@
                     <h2 style="margin-bottom: 10px;">Tidak Ada Hasil Quiz</h2>
                     <p style="color: #6c757d; margin-bottom: 30px;">Silakan selesaikan quiz terlebih dahulu untuk melihat hasil.</p>
                     <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                        <a href="index.html" class="btn btn-primary">
-                            <i class="fas fa-home"></i> Kembali ke Home
+                        <a href="index.html" class="btn btn-primary" style="background: #25D366;">
+                            <i class="fas fa-home"></i> Kembali ke Halaman Depan
                         </a>
                         <a href="quiz.html" class="btn btn-secondary">
                             <i class="fas fa-play"></i> Mulai Quiz
@@ -866,8 +877,8 @@
                         <button onclick="location.reload()" class="btn btn-primary">
                             <i class="fas fa-redo"></i> Muat Ulang
                         </button>
-                        <a href="index.html" class="btn btn-secondary">
-                            <i class="fas fa-home"></i> Kembali ke Home
+                        <a href="index.html" class="btn btn-secondary" style="background: #25D366;">
+                            <i class="fas fa-home"></i> Kembali ke Halaman Depan
                         </a>
                     </div>
                 </div>
