@@ -150,3 +150,4 @@ initTheme();
 
 // Export functions for edit.js
 export { auth, db, signOut, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, increment };
+
