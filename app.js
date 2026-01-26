@@ -239,3 +239,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Make functions globally available for onclick handlers
 window.toggleTheme = toggleTheme;
+
