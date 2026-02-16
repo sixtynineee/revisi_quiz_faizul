@@ -31,8 +31,24 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     
     <style>
+
+       .mobile-only {
+    display: none;
+}
+
+.desktop-only {
+    display: block;
+}
         /* Mobile optimizations for admin dashboard */
         @media (max-width: 768px) {
+
+             .desktop-only {
+        display: none !important;
+    }
+
+    .mobile-only {
+        display: block !important;
+    }
             .admin-container {
                 flex-direction: column !important;
             }
@@ -80,6 +96,7 @@
         }
         
         @media (max-width: 480px) {
+        
             .topbar {
                 padding: 8px 12px !important;
             }
@@ -180,21 +197,21 @@
                 </div>
             </div>
             <div class="top-actions">
-                <!-- <button id="refreshBtn" class="btn secondary mobile-only">
+                <button id="refreshBtn" class="btn secondary mobile-only">
                     <i class="fas fa-redo"></i>
-                </button> -->
+                </button>
                 <button id="refreshBtn" class="btn secondary desktop-only">
                     <i class="fas fa-redo"></i> Refresh
                 </button>
-                <!-- <button id="logoutBtn" class="btn secondary mobile-only">
+                <button id="logoutBtn" class="btn secondary mobile-only">
                     <i class="fas fa-sign-out-alt"></i>
-                </button> -->
+                </button>
                 <button id="logoutBtn" class="btn secondary desktop-only">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
-                <!-- <a href="index.html" class="btn primary mobile-only">
+                <a href="index.html" class="btn primary mobile-only">
                     <i class="fas fa-eye"></i>
-                </a> -->
+                </a>
                 <a href="index.html" class="btn primary desktop-only">
                     <i class="fas fa-eye"></i> View Site
                 </a>
@@ -631,5 +648,6 @@
     </style>
 </body>
 </html>
+
 
 
